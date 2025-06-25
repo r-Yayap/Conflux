@@ -47,23 +47,24 @@ def merge_dataframes(
 
         prepared.append(working)
 
-    # 2) Merge pairwise, dropping original_row_index from all but the first DF
+    # 2) Merge all DataFrames pairwise, giving each “next” df a unique suffix
     merged = prepared[0]
-    for next_df in prepared[1:]:
-        to_merge = next_df
-        if "original_row_index" in to_merge.columns:
-            to_merge = to_merge.drop(columns=["original_row_index"])
+    for idx, next_df in enumerate(prepared[1:], start=2):
         merged = pd.merge(
             merged,
-            to_merge,
+            next_df,
             on=["common_ref", "refno_count"],
             how="outer",
-            suffixes=("", "")
+            suffixes=("", f"_{idx}")
         ).fillna("")
 
-    # 3) Clean up
+    # 3) Clean up…
     if "refno_count" in merged.columns:
         merged = merged.drop(columns=["refno_count"])
+    if "original_row_index" in merged.columns:
+        merged["original_row_index"] = pd.to_numeric(
+            merged["original_row_index"], errors="coerce"
+        ).fillna(0).astype(int)
 
     # Ensure the first original_row_index is numeric (if present)
     if "original_row_index" in merged.columns:

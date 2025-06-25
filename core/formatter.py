@@ -39,6 +39,7 @@ def write_styled_excel(
     # 6. Title-to-title rich-text diffing
     apply_title_highlighting(ws, merged_df, title_columns)
 
+
     # 7. Save & close
     wb.save(output_path)
     wb.close()
@@ -188,6 +189,10 @@ def apply_formatting_and_hyperlinks(
             actual = row.get(colname, "")
             if pd.notna(row.get('number_1')) and str(actual).strip().lower() != str(expected).strip().lower():
                 ws.cell(i+2, cidx).fill = light_red
+
+    # 5️⃣ Highlight filename mismatches
+    highlight_filename_mismatches(ws, merged_df, col_idx, config)
+
 
 
 def get_ws_column_index(ws: Worksheet, header_name: str) -> Optional[int]:
@@ -349,6 +354,85 @@ def create_rich_text(original, aligned1, aligned2, flags):
         rich.append(original[idx:])
 
     return rich
+
+def highlight_filename_mismatches(
+    ws,
+    merged_df: pd.DataFrame,
+    col_idx: Dict[str,int],
+    config: CheckConfig
+) -> None:
+    """
+    After hyperlinks have been applied, for each row where filename doesn't
+    start with number_1, split both on '-' and color only the mismatched
+    characters in red, leaving matches black, then apply a yellow fill.
+    """
+    filename_col = config.filename_column
+    if not filename_col or filename_col not in col_idx:
+        return
+
+    fidx   = col_idx[filename_col]
+    yellow = PatternFill("solid", fgColor="FFFF99")
+
+    for i, row in merged_df.iterrows():
+        num = str(row.get("number_1", "")).strip()
+        fn  = str(row.get(filename_col, "")).strip()
+
+        # skip if no drawing number or no filename at all
+        if not num or not fn:
+            continue
+
+        # if filename truly begins with the drawing number (case-insensitive), nothing to highlight
+        if fn.lower().startswith(num.lower()):
+            continue
+
+        # Split into tokens on hyphens
+        num_tokens  = num.split("-")
+        file_tokens = fn.split("-")
+
+        # Only compare up to len(num_tokens); the rest becomes "extra"
+        compare_len = len(num_tokens)
+        base_tokens = file_tokens[:compare_len]
+        extra_part  = ""
+        if len(file_tokens) > compare_len:
+            extra_part = "-" + "-".join(file_tokens[compare_len:])
+
+        rich = CellRichText()
+        def font(color, bold=False):
+            return InlineFont(rFont="Calibri", sz=11, color=color, b=bold)
+
+        # Compare token by token
+        for idx in range(compare_len):
+            ft = base_tokens[idx] if idx < len(base_tokens) else ""
+            nt = num_tokens[idx]
+
+            if ft == nt:
+                # perfect match → one black block
+                rich.append(TextBlock(font("000000"), ft))
+            else:
+                # character-by-character diff
+                min_len = min(len(ft), len(nt))
+                for c in range(min_len):
+                    ch = ft[c]
+                    if ch == nt[c]:
+                        rich.append(TextBlock(font("000000"), ch))
+                    else:
+                        rich.append(TextBlock(font("FF0000", bold=True), ch))
+                # anything extra in the filename token
+                for ch in ft[min_len:]:
+                    rich.append(TextBlock(font("FF0000", bold=True), ch))
+
+            # re-insert the hyphen separator if this wasn’t the last token
+            if idx < compare_len - 1:
+                rich.append(TextBlock(font("000000"), "-"))
+
+        # append any extra suffix (e.g. "-COVER PAGE.pdf")
+        if extra_part:
+            rich.append(TextBlock(font("000000"), extra_part))
+
+        # write back into the cell and apply yellow fill
+        cell = ws.cell(row=i+2, column=fidx)
+        cell.value = rich
+        cell.fill  = yellow
 
 def apply_title_highlighting(
     ws: Worksheet,
