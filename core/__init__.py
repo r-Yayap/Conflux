@@ -5,6 +5,7 @@ from .validators   import CheckConfig
 from .reader       import read_excels
 from .merge_service import merge_dataframes
 from .formatter    import write_styled_excel
+from .utils         import add_title_match_column
 
 __all__ = [
     "MergerFacade",
@@ -12,4 +13,5 @@ __all__ = [
     "read_excels",
     "merge_dataframes",
     "write_styled_excel",
+    "add_title_match_column",
 ]

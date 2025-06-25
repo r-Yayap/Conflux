@@ -64,7 +64,7 @@ def apply_validators(df: pd.DataFrame, config: CheckConfig) -> pd.DataFrame:
             ref = str(row.get("number_1", "")).strip()
             filename = str(row.get(filename_col, "")).strip()
             if ref and filename and not filename.startswith(ref):
-                comment = f"Filename & Drawing Number Mismatch: {filename} vs {ref}"
+                comment = f"Filename & Drawing Number Mismatch"
                 return append_comment(row["Comments_1"], comment)
             return row["Comments_1"]
 
