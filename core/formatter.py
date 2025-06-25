@@ -98,18 +98,35 @@ def apply_formatting_and_hyperlinks(
     dup_cols = ['number_1', 'number_2', 'common_ref'] + (['number_3'] if has3 else [])
     dup_sets = {col: set(merged_df[col][merged_df[col].duplicated()]) for col in dup_cols}
 
+    # Add the Case/Instance column
     inst_col = ws.max_column + 1
     inst_header = "Case" if has3 else "Instance"
     ws.cell(row=1, column=inst_col, value=inst_header)
 
-    instance_mapping = {
-        (True, True, True): ""   # all three present
-    } if has3 else {
-        (True, True): ""         # both present
-    }
+    # --- Full presence → text mapping ---
+    if has3:
+        instance_mapping = {
+            (True, False, False): "PDF is provided but not listed in LOD",
+            (False, True, False): "LOD_2 only",
+            (False, False, True): "LOD_3 only",
+            (True, True, False): "PDF is provided and number_2",
+            (True, False, True): "PDF is provided and number_3",
+            (False, True, True): "No PDF but found in LOD_2 and LOD_3",
+            (True, True, True): ""   # all three present → blank
+        }
+    else:
+        instance_mapping = {
+            (True, False): "PDF is provided but not listed in LOD",
+            (False, True): "LOD_2",
+            (True, True): ""         # both present → blank
+        }
+    # -------------------------------------
 
+    # Iterate each row
     for i, _ in merged_df.iterrows():
         r = i + 2
+
+        # Build presence tuple
         if has3:
             presence = (
                 bool(ws.cell(r, col_idx['number_1']).value),
@@ -124,7 +141,7 @@ def apply_formatting_and_hyperlinks(
             )
             number_cols = ['number_1', 'number_2']
 
-        # fill
+        # Apply fills
         if presence in fills:
             fill = fills[presence]
             for colname, present in zip(number_cols, presence):
@@ -133,17 +150,17 @@ def apply_formatting_and_hyperlinks(
             if 'common_ref' in col_idx:
                 ws.cell(r, col_idx['common_ref']).fill = fill
 
-        # duplicate font
+        # Apply duplicate-fonts
         for colname, dset in dup_sets.items():
             if colname in col_idx:
                 val = ws.cell(r, col_idx[colname]).value
                 if val in dset:
                     ws.cell(r, col_idx[colname]).font = dup_font
 
-        # instance/case text
+        # Set Case/Instance text
         ws.cell(r, inst_col).value = instance_mapping.get(presence, "None")
 
-    # hyperlinks
+    # Re-insert hyperlinks
     for orig_idx, cols in metadata.get('hyperlinks', {}).items():
         match = merged_df[merged_df.get('original_row_index', -1) == orig_idx]
         if not match.empty:
@@ -154,7 +171,7 @@ def apply_formatting_and_hyperlinks(
                     cell.hyperlink = url
                     cell.style = "Hyperlink"
 
-    # highlight failed checks
+    # Highlight rows failing checks
     light_red = PatternFill("solid", fgColor="FFCCCC")
     checks = [
         (config.status_column, config.status_value),
