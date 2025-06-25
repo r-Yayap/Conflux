@@ -38,7 +38,7 @@ class MergerFacade:
             metadata      = metadata
         )
 
-        # Add true or false
+        # Add true or false for title match
         merged_df = add_title_match_column(merged_df, title_columns)
 
         # 3) Apply validation rules (Comments_1, status/project/custom/filename checks)

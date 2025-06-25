@@ -12,7 +12,6 @@ from openpyxl.cell.text import InlineFont
 
 from core.validators import CheckConfig
 
-
 def write_styled_excel(
     merged_df: pd.DataFrame,
     metadata: Dict,
@@ -194,7 +193,6 @@ def apply_formatting_and_hyperlinks(
     highlight_filename_mismatches(ws, merged_df, col_idx, config)
 
 
-
 def get_ws_column_index(ws: Worksheet, header_name: str) -> Optional[int]:
     for cell in ws[1]:
         if isinstance(cell.value, str) and cell.value.strip().lower() == header_name.strip().lower():
@@ -364,20 +362,22 @@ def highlight_filename_mismatches(
     """
     After hyperlinks have been applied, for each row where filename doesn't
     start with number_1, split both on '-' and color only the mismatched
-    characters in red, leaving matches black, then apply a yellow fill.
+    characters in red & bold, leaving matches black.  Then apply a yellow fill
+    to the filename cell only.
     """
     filename_col = config.filename_column
     if not filename_col or filename_col not in col_idx:
         return
 
     fidx   = col_idx[filename_col]
+    nidx   = col_idx.get("number_1")
     yellow = PatternFill("solid", fgColor="FFFF99")
 
     for i, row in merged_df.iterrows():
         num = str(row.get("number_1", "")).strip()
         fn  = str(row.get(filename_col, "")).strip()
 
-        # skip if no drawing number or no filename at all
+        # skip if missing either
         if not num or not fn:
             continue
 
@@ -385,54 +385,73 @@ def highlight_filename_mismatches(
         if fn.lower().startswith(num.lower()):
             continue
 
-        # Split into tokens on hyphens
+        # Tokenize on hyphens
         num_tokens  = num.split("-")
         file_tokens = fn.split("-")
-
-        # Only compare up to len(num_tokens); the rest becomes "extra"
         compare_len = len(num_tokens)
         base_tokens = file_tokens[:compare_len]
         extra_part  = ""
         if len(file_tokens) > compare_len:
             extra_part = "-" + "-".join(file_tokens[compare_len:])
 
-        rich = CellRichText()
+        # Helpers
         def font(color, bold=False):
             return InlineFont(rFont="Calibri", sz=11, color=color, b=bold)
 
-        # Compare token by token
+        # Build filename rich text
+        rich_fn  = CellRichText()
+        # Build number_1 rich text
+        rich_num = CellRichText()
+
         for idx in range(compare_len):
             ft = base_tokens[idx] if idx < len(base_tokens) else ""
             nt = num_tokens[idx]
 
             if ft == nt:
-                # perfect match → one black block
-                rich.append(TextBlock(font("000000"), ft))
+                # perfect token match
+                rich_fn.append(TextBlock(font("000000"), ft))
+                rich_num.append(TextBlock(font("000000"), nt))
             else:
-                # character-by-character diff
+                # char-by-char diff for this token
                 min_len = min(len(ft), len(nt))
                 for c in range(min_len):
-                    ch = ft[c]
-                    if ch == nt[c]:
-                        rich.append(TextBlock(font("000000"), ch))
+                    fch = ft[c]
+                    nch = nt[c]
+                    if fch == nch:
+                        rich_fn.append(TextBlock(font("000000"), fch))
+                        rich_num.append(TextBlock(font("000000"), nch))
                     else:
-                        rich.append(TextBlock(font("FF0000", bold=True), ch))
-                # anything extra in the filename token
+                        # mismatch → red bold
+                        rich_fn.append(TextBlock(font("FF0000", bold=True), fch))
+                        rich_num.append(TextBlock(font("FF0000", bold=True), nch))
+                # trailing extra chars in filename token
                 for ch in ft[min_len:]:
-                    rich.append(TextBlock(font("FF0000", bold=True), ch))
+                    rich_fn.append(TextBlock(font("FF0000", bold=True), ch))
+                # trailing extra chars in number token
+                for ch in nt[min_len:]:
+                    rich_num.append(TextBlock(font("FF0000", bold=True), ch))
 
-            # re-insert the hyphen separator if this wasn’t the last token
+            # re-insert the hyphen separator if not last
+            sep = TextBlock(font("000000"), "-")
             if idx < compare_len - 1:
-                rich.append(TextBlock(font("000000"), "-"))
+                rich_fn.append(sep)
+                rich_num.append(sep)
 
-        # append any extra suffix (e.g. "-COVER PAGE.pdf")
+        # append any extra suffix on filename
         if extra_part:
-            rich.append(TextBlock(font("000000"), extra_part))
+            rich_fn.append(TextBlock(font("000000"), extra_part))
 
-        # write back into the cell and apply yellow fill
-        cell = ws.cell(row=i+2, column=fidx)
-        cell.value = rich
-        cell.fill  = yellow
+        # Write back
+        r = i + 2  # account for header row
+        # Filename cell gets yellow fill
+        cell_fn = ws.cell(row=r, column=fidx)
+        cell_fn.value = rich_fn
+        cell_fn.fill  = yellow
+
+        # number_1 cell gets only the rich text
+        if nidx:
+            cell_num = ws.cell(row=r, column=nidx)
+            cell_num.value = rich_num
 
 def apply_title_highlighting(
     ws: Worksheet,
