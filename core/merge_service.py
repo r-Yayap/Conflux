@@ -13,37 +13,31 @@ def merge_dataframes(
     Merge a list of DataFrames on their reference columns, optionally carrying along title columns.
 
     Args:
-        dfs: list of DataFrames to merge (in the same order as ref_columns).
-        ref_columns: list of column names in each DataFrame to join on.
-        title_columns: list of optional title‐column names for each DataFrame.
-        metadata: dict carrying extra info (e.g. hyperlinks, original_row_index).
+      dfs: list of DataFrames (in the same order as ref_columns).
+      ref_columns: list of column names in each DataFrame to join on.
+      title_columns: optional list of title‐column names for each DataFrame.
+      metadata: dict carrying extra info (e.g. hyperlinks, original_row_index).
 
     Returns:
-        A single merged DataFrame, with columns renamed to:
-          - number_1, number_2, … for each ref column
-          - common_ref
-          - title_excel1, title_excel2, … for any title_columns provided
+      A single merged DataFrame.
     """
-    # Validate inputs
     if len(dfs) != len(ref_columns):
         raise ValueError("dfs and ref_columns must have the same length")
 
-    # 1) Prepare each DataFrame: rename ref col, compute counts, set common_ref, rename title col
+    # 1) Prepare each DataFrame
     prepared = []
     for idx, (df, ref_col) in enumerate(zip(dfs, ref_columns), start=1):
         if ref_col not in df.columns:
             raise KeyError(f"Reference column '{ref_col}' not found in DataFrame #{idx}")
 
-        working = df.copy().fillna("")  # preserve original
+        working = df.copy().fillna("")
 
-        # Rename reference column to a uniform name
+        # Rename ref column
         num_col = f"number_{idx}"
         working = working.rename(columns={ref_col: num_col})
 
-        # Compute occurrence count for duplicates of the same ref
+        # Compute occurrence count and common_ref
         working["refno_count"] = working.groupby(num_col).cumcount()
-
-        # Set common_ref from this number
         working["common_ref"] = working[num_col]
 
         # Rename title column if provided
@@ -53,23 +47,25 @@ def merge_dataframes(
 
         prepared.append(working)
 
-    # 2) Merge all DataFrames pairwise
+    # 2) Merge pairwise, dropping original_row_index from all but the first DF
     merged = prepared[0]
     for next_df in prepared[1:]:
+        to_merge = next_df
+        if "original_row_index" in to_merge.columns:
+            to_merge = to_merge.drop(columns=["original_row_index"])
         merged = pd.merge(
             merged,
-            next_df,
+            to_merge,
             on=["common_ref", "refno_count"],
             how="outer",
             suffixes=("", "")
         ).fillna("")
 
     # 3) Clean up
-    # Drop the temporary refno_count column
     if "refno_count" in merged.columns:
         merged = merged.drop(columns=["refno_count"])
 
-    # Ensure original_row_index is numeric if present
+    # Ensure the first original_row_index is numeric (if present)
     if "original_row_index" in merged.columns:
         merged["original_row_index"] = pd.to_numeric(
             merged["original_row_index"], errors="coerce"

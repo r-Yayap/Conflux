@@ -11,58 +11,49 @@ from .merge_service import merge_dataframes  # pure merge of DataFrames
 from .validators import apply_validators, CheckConfig  # populates Comments_1
 from .formatter import write_styled_excel  # writes Excel with formatting, rich-text, hyperlinks
 
-
 class MergerFacade:
     """
     High-level facade for merging Excel files with validation and styling.
-
-    Example usage:
-        merged_df = MergerFacade.run_merge(
-            paths=["file1.xlsx", "file2.xlsx"],
-            ref_columns=["DrawingNo", "DrawingNo"],
-            output_path="merged_output.xlsx",
-            title_columns=["Title1", "Title2"],
-            check_config=CheckConfig(
-                status_column="Status", status_value="OK",
-                project_column="Project", project_value="Alpha",
-                custom_checks=[("Phase", "P1")],
-                filename_column="Filename"
-            )
-        )
     """
-
 
     @staticmethod
     def run_merge(
-            paths: List[str],
-            ref_columns: List[str],
-            output_path: str,
-            *,
-            title_columns: Optional[List[str]] = None,
-            check_config: Optional[CheckConfig] = None
+        paths: List[str],
+        ref_columns: List[str],
+        output_path: str,
+        *,
+        title_columns: Optional[List[str]]  = None,
+        check_config:  Optional[CheckConfig] = None
     ) -> pd.DataFrame:
-        # 1) Read all Excels
+
+        # 1) Read input files (and extract hyperlinks & original_row_index)
         dfs, metadata = read_excels(paths, ref_columns)
 
-        # 2) Merge with the correct signature
+        # 2) Merge into a single DataFrame
         merged_df = merge_dataframes(
             dfs,
-            ref_columns=ref_columns,
-            title_columns=title_columns or [],
-            metadata=metadata
+            ref_columns   = ref_columns,
+            title_columns = title_columns or [],
+            metadata      = metadata
         )
 
-        # 3) Validate
+        # 3) Apply validation rules (Comments_1, status/project/custom/filename checks)
         if check_config:
             merged_df = apply_validators(merged_df, check_config)
 
-        # 4) Style & write out
+        # 4) Prepare the *renamed* title column names for styling
+        renamed_titles: List[str] = []
+        for idx, orig in enumerate(title_columns or [], start=1):
+            if orig:
+                renamed_titles.append(f"title_excel{idx}")
+
+        # 5) Write out styled Excel (fills, hyperlinks, rich-text, diffs)
         write_styled_excel(
-            merged_df=merged_df,
-            metadata=metadata,
-            output_path=output_path,
-            title_columns=title_columns or [],
-            check_config=check_config or CheckConfig()
+            merged_df     = merged_df,
+            metadata      = metadata,
+            output_path   = output_path,
+            title_columns = renamed_titles,
+            check_config  = check_config or CheckConfig()
         )
 
         return merged_df
