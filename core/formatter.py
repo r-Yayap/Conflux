@@ -50,7 +50,9 @@ def reorder_columns(ws: Worksheet) -> None:
 
     title_cols = [c for c in ["title_excel1", "title_excel2", "title_excel3"] if c in original_headers]
     final_cols = [c for c in ["title_match", "Comments_1", "Instance", "Case","Remerged","Duplicate"] if c in original_headers]
-    excluded = set(title_cols) | set(final_cols) | {"common_ref"}
+
+    # add your internal columns to excluded so they get dropped:
+    excluded = set(title_cols) | set(final_cols) | {"common_ref", "original_row_index", "original_row_index_3", "original_row_index_2"}
 
     data_cols = [c for c in original_headers if c not in excluded]
     new_order = (
