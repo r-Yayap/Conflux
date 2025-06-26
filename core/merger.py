@@ -10,7 +10,7 @@ from .reader import read_excels  # loads List[DataFrame], metadata (hyperlinks, 
 from .merge_service import merge_dataframes  # pure merge of DataFrames
 from .validators import apply_validators, CheckConfig  # populates Comments_1
 from .formatter import write_styled_excel  # writes Excel with formatting, rich-text, hyperlinks
-from .utils import add_title_match_column
+from .utils import add_title_match_column, remerge_by_filename
 
 class MergerFacade:
     """
@@ -38,8 +38,15 @@ class MergerFacade:
             metadata      = metadata
         )
 
-        # Add true or false for title match
+        # ──────────────────────────────────────────
+
+        # Added step: re‐merge by filename when number_1 had no match
+        merged_df = remerge_by_filename(merged_df, check_config.filename_column if check_config else None)
+
+        # Added step: Add true or false for title match
         merged_df = add_title_match_column(merged_df, title_columns)
+
+        # ──────────────────────────────────────────
 
         # 3) Apply validation rules (Comments_1, status/project/custom/filename checks)
         if check_config:

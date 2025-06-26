@@ -192,6 +192,13 @@ def apply_formatting_and_hyperlinks(
     # 5️⃣ Highlight filename mismatches
     highlight_filename_mismatches(ws, merged_df, col_idx, config)
 
+    # 6️⃣ Highlight any rows that were re‐merged by filename
+    if "Remerged" in merged_df.columns and "common_ref" in col_idx:
+        cyan = PatternFill("solid", fgColor="00FFFF")
+        for i, row in merged_df.iterrows():
+            if row.get("Remerged", False):
+                r = i + 2
+                ws.cell(r, col_idx["common_ref"]).fill = cyan
 
 def get_ws_column_index(ws: Worksheet, header_name: str) -> Optional[int]:
     for cell in ws[1]:

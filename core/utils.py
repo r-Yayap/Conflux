@@ -43,3 +43,88 @@ def add_title_match_column(
 
     df["title_match"] = df.apply(compare_row, axis=1)
     return df
+
+
+def extract_drawing_from_filename(fn: str, num_tokens: int) -> str:
+    """
+    Given a filename like "A-B-C-D-extra.pdf" and num_tokens=4,
+    return "A-B-C-D". If fn has fewer tokens, just return fn.
+    """
+    parts = fn.split("-")
+    return "-".join(parts[:num_tokens]) if len(parts) >= num_tokens else fn
+
+
+def _is_empty(val) -> bool:
+    """True if value is None, NaN, empty or whitespace-only string."""
+    if val is None:
+        return True
+    if isinstance(val, float) and pd.isna(val):
+        return True
+    if isinstance(val, str) and val.strip() == "":
+        return True
+    return False
+
+#working but hyperlink is still missing
+def remerge_by_filename(
+    df: pd.DataFrame,
+    filename_col: Optional[str]
+) -> pd.DataFrame:
+    """
+    For rows where number_1 exists but number_2/3 are blank,
+    extract a candidate from the filename, find that in number_2/3
+    elsewhere, copy only into truly empty target cells, mark
+    them Remerged=True, then drop the original orphan.
+    """
+    if not filename_col or filename_col not in df.columns:
+        df["Remerged"] = False
+        return df
+
+    df = df.copy()
+    df["Remerged"] = False
+    to_drop = []
+    has3 = "number_3" in df.columns
+
+    for idx, row in df.iterrows():
+        n1 = str(row.get("number_1", "")).strip()
+        fn = str(row.get(filename_col, "")).strip()
+
+        # skip if no drawing num or already had number_2/3
+        if not n1 or (not _is_empty(row.get("number_2"))) or (has3 and not _is_empty(row.get("number_3"))):
+            continue
+
+        # build candidate from filename
+        token_count = len(n1.split("-"))
+        cand = extract_drawing_from_filename(fn, token_count)
+
+        # look in number_2 then number_3
+        for num_col in ("number_2", "number_3") if has3 else ("number_2",):
+            matches = df[df[num_col].astype(str).str.strip() == cand]
+            if matches.empty:
+                continue
+
+            target = matches.index[0]
+            # copy only into truly empty cells
+            for col in df.columns:
+                if col in (
+                    "number_1", "number_2", "number_3",
+                    "common_ref", "Remerged",
+                    "refno_count", "original_row_index", "title_match"
+                ):
+                    continue
+                src = row[col]
+                tgt = df.at[target, col]
+                if not _is_empty(src) and _is_empty(tgt):
+                    df.at[target, col] = src
+
+            # fix common_ref & mark
+            df.at[target, "number_1"] = n1
+            df.at[target, "common_ref"] = cand
+            df.at[target, "Remerged"] = True
+
+            to_drop.append(idx)
+            break
+
+    if to_drop:
+        df = df.drop(index=to_drop).reset_index(drop=True)
+
+    return df
