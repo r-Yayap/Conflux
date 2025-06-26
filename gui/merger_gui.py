@@ -615,7 +615,22 @@ class MergerGUI:
                 title_columns=title_cols,
                 check_config=cfg
             )
-            messagebox.showinfo("Success", f"Merged file saved at {output}")
+
+            # open file
+            if messagebox.askyesno(
+                    "Success",
+                    f"Merged file saved at\n\n{output}\n\nWould you like to open it now?"
+            ):
+                try:
+                    os.startfile(output)
+                except AttributeError:
+                    # not Windows? try the generic way
+                    import subprocess, sys
+                    if sys.platform == "darwin":
+                        subprocess.Popen(["open", output])
+                    else:
+                        subprocess.Popen(["xdg-open", output])
+
         except Exception as e:
             # messagebox.showerror("Error", str(e))
             traceback.print_exc()

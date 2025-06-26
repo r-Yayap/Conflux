@@ -4,9 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b5c63e04-363d-4d46-a21d-1da1d6523a4a" name="Changes" comment="added duplicate column">
+    <list default="true" id="b5c63e04-363d-4d46-a21d-1da1d6523a4a" name="Changes" comment="dropped columns">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/core/formatter.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/formatter.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gui/merger_gui.py" beforeDir="false" afterPath="$PROJECT_DIR$/gui/merger_gui.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -182,7 +182,15 @@
       <option name="project" value="LOCAL" />
       <updated>1750922743372</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="dropped columns">
+      <option name="closed" value="true" />
+      <created>1750923475022</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1750923475022</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -196,7 +204,8 @@
     <MESSAGE value="Remerge by filename but hyperlink is still missing" />
     <MESSAGE value="Remerge by filename - working" />
     <MESSAGE value="added duplicate column" />
-    <option name="LAST_COMMIT_MESSAGE" value="added duplicate column" />
+    <MESSAGE value="dropped columns" />
+    <option name="LAST_COMMIT_MESSAGE" value="dropped columns" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
