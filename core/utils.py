@@ -121,6 +121,9 @@ def remerge_by_filename(
             df.at[target, "common_ref"] = cand
             df.at[target, "Remerged"] = True
 
+            # preserve the sheet-1 original_row_index so hyperlinks will follow
+            df.at[target, "original_row_index"] = row["original_row_index"]
+
             to_drop.append(idx)
             break
 
