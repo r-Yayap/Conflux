@@ -635,17 +635,9 @@ class MergerGUI:
             # messagebox.showerror("Error", str(e))
             traceback.print_exc()
 
-            # 2) If you still want a pop-up with details:
-            full_tb = traceback.format_exc()
-            messagebox.showerror(
-                "Merge Failed",
-                f"{str(e)}\n\nFull traceback:\n{full_tb}"
-            )
-
     def run(self):
         if isinstance(self.mergerApp, ctk.CTk):
             self.mergerApp.mainloop()
-
 
 
 if __name__ == "__main__":
