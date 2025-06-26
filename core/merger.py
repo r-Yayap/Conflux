@@ -39,13 +39,46 @@ class MergerFacade:
         )
 
         # ──────────────────────────────────────────
+        # ──────────────────────────────────────────
+        # Added Steps
+        # ──────────────────────────────────────────
+        # ──────────────────────────────────────────
 
-        # Added step: re‐merge by filename when number_1 had no match
+        # 2.a: re‐merge by filename when number_1 had no match
         merged_df = remerge_by_filename(merged_df, check_config.filename_column if check_config else None)
 
-        # Added step: Add true or false for title match
+        # 2.b: Add true or false for title match
         merged_df = add_title_match_column(merged_df, title_columns)
 
+        # 2.c: Detect duplicates in each number_★ column and label them
+        n1 = merged_df["number_1"].fillna("").astype(str)
+        mask1 = n1 != ""
+        dup1 = mask1 & n1.duplicated(keep=False)
+
+        n2 = merged_df["number_2"].fillna("").astype(str)
+        mask2 = n2 != ""
+        dup2 = mask2 & n2.duplicated(keep=False)
+
+        has3 = "number_3" in merged_df.columns
+        if has3:
+            n3 = merged_df["number_3"].fillna("").astype(str)
+            mask3 = n3 != ""
+            dup3 = mask3 & n3.duplicated(keep=False)
+        else:
+            dup3 = None
+
+        def make_dup_label(i):
+            labels = []
+            if dup1.iloc[i]:
+                labels.append("Duplicate in PDF Title block")
+            if dup2.iloc[i]:
+                labels.append("Duplicate in LOD 2")
+            if has3 and dup3.iloc[i]:
+                labels.append("Duplicate in LOD 3")
+            return "; ".join(labels)
+
+        merged_df["Duplicate"] = [make_dup_label(i) for i in range(len(merged_df))]
+        # ──────────────────────────────────────────
         # ──────────────────────────────────────────
 
         # 3) Apply validation rules (Comments_1, status/project/custom/filename checks)

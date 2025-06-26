@@ -49,7 +49,7 @@ def reorder_columns(ws: Worksheet) -> None:
     data = list(ws.iter_rows(min_row=2, values_only=True))
 
     title_cols = [c for c in ["title_excel1", "title_excel2", "title_excel3"] if c in original_headers]
-    final_cols = [c for c in ["title_match", "Comments_1", "Instance", "Case"] if c in original_headers]
+    final_cols = [c for c in ["title_match", "Comments_1", "Instance", "Case","Remerged","Duplicate"] if c in original_headers]
     excluded = set(title_cols) | set(final_cols) | {"common_ref"}
 
     data_cols = [c for c in original_headers if c not in excluded]
