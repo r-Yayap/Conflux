@@ -1,5 +1,5 @@
 # core/validators.py
-
+import os
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 import pandas as pd
@@ -60,11 +60,15 @@ def apply_validators(df: pd.DataFrame, config: CheckConfig) -> pd.DataFrame:
     # 3. Filename vs reference number check
     if config.filename_column:
         filename_col = config.filename_column
+
         def filename_check(row):
             ref = str(row.get("number_1", "")).strip()
             filename = str(row.get(filename_col, "")).strip()
-            if ref and filename and not filename.startswith(ref):
-                comment = f"Filename & Drawing Number Mismatch"
+            # strip off extension
+            filename_base, _ext = os.path.splitext(filename)
+
+            if ref and filename_base and not filename_base.startswith(ref):
+                comment = "Filename & Drawing Number Mismatch"
                 return append_comment(row["Comments_1"], comment)
             return row["Comments_1"]
 

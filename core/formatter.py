@@ -1,5 +1,5 @@
 # core/formatter.py
-
+import os
 from typing import List, Optional, Dict
 import pandas as pd
 import re
@@ -371,8 +371,9 @@ def highlight_filename_mismatches(
     """
     After hyperlinks have been applied, for each row where filename doesn't
     start with number_1, split both on '-' and color only the mismatched
-    characters in red & bold, leaving matches black.  Then apply a yellow fill
-    to the filename cell only.
+    characters in red & bold, leaving matches black. Then apply a yellow fill
+    to the filename cell only, and update the number_1 cell with the same
+    per-character diff (no fill).
     """
     filename_col = config.filename_column
     if not filename_col or filename_col not in col_idx:
@@ -390,76 +391,81 @@ def highlight_filename_mismatches(
         if not num or not fn:
             continue
 
+        # strip off any extension (".pdf", ".xlsm", etc.)
+        fn_base, ext = os.path.splitext(fn)
+
         # if filename truly begins with the drawing number (case-insensitive), nothing to highlight
-        if fn.lower().startswith(num.lower()):
+        if fn_base.lower().startswith(num.lower()):
             continue
 
         # Tokenize on hyphens
         num_tokens  = num.split("-")
-        file_tokens = fn.split("-")
+        file_tokens = fn_base.split("-")
         compare_len = len(num_tokens)
         base_tokens = file_tokens[:compare_len]
         extra_part  = ""
         if len(file_tokens) > compare_len:
             extra_part = "-" + "-".join(file_tokens[compare_len:])
 
-        # Helpers
+        # Helper to build fonts
         def font(color, bold=False):
             return InlineFont(rFont="Calibri", sz=11, color=color, b=bold)
 
-        # Build filename rich text
+        # Build rich text containers
         rich_fn  = CellRichText()
-        # Build number_1 rich text
         rich_num = CellRichText()
 
-        for idx in range(compare_len):
-            ft = base_tokens[idx] if idx < len(base_tokens) else ""
-            nt = num_tokens[idx]
+        # Compare token by token
+        for t in range(compare_len):
+            ft = base_tokens[t] if t < len(base_tokens) else ""
+            nt = num_tokens[t]
 
             if ft == nt:
                 # perfect token match
                 rich_fn.append(TextBlock(font("000000"), ft))
                 rich_num.append(TextBlock(font("000000"), nt))
             else:
-                # char-by-char diff for this token
-                min_len = min(len(ft), len(nt))
-                for c in range(min_len):
-                    fch = ft[c]
-                    nch = nt[c]
+                # char-by-char diff
+                common_len = min(len(ft), len(nt))
+                for c in range(common_len):
+                    fch, nch = ft[c], nt[c]
                     if fch == nch:
                         rich_fn.append(TextBlock(font("000000"), fch))
                         rich_num.append(TextBlock(font("000000"), nch))
                     else:
-                        # mismatch → red bold
                         rich_fn.append(TextBlock(font("FF0000", bold=True), fch))
                         rich_num.append(TextBlock(font("FF0000", bold=True), nch))
-                # trailing extra chars in filename token
-                for ch in ft[min_len:]:
+                # any extra in filename token
+                for ch in ft[common_len:]:
                     rich_fn.append(TextBlock(font("FF0000", bold=True), ch))
-                # trailing extra chars in number token
-                for ch in nt[min_len:]:
+                # any extra in number_1 token
+                for ch in nt[common_len:]:
                     rich_num.append(TextBlock(font("FF0000", bold=True), ch))
 
-            # re-insert the hyphen separator if not last
-            sep = TextBlock(font("000000"), "-")
-            if idx < compare_len - 1:
+            # re-insert hyphen separator if not last
+            if t < compare_len - 1:
+                sep = TextBlock(font("000000"), "-")
                 rich_fn.append(sep)
                 rich_num.append(sep)
 
-        # append any extra suffix on filename
+        # append any “extra” suffix (re-join hyphen + rest)
         if extra_part:
             rich_fn.append(TextBlock(font("000000"), extra_part))
 
-        # Write back
-        r = i + 2  # account for header row
-        # Filename cell gets yellow fill
-        cell_fn = ws.cell(row=r, column=fidx)
+        # re-append extension on filename side
+        if ext:
+            rich_fn.append(TextBlock(font("000000"), ext))
+
+        # write back into worksheet
+        row_idx = i + 2  # account for header
+        # Filename cell: rich text + yellow fill
+        cell_fn = ws.cell(row=row_idx, column=fidx)
         cell_fn.value = rich_fn
         cell_fn.fill  = yellow
 
-        # number_1 cell gets only the rich text
+        # number_1 cell: just the rich text (no fill)
         if nidx:
-            cell_num = ws.cell(row=r, column=nidx)
+            cell_num = ws.cell(row=row_idx, column=nidx)
             cell_num.value = rich_num
 
 def apply_title_highlighting(

@@ -1,5 +1,5 @@
 # core/utils.py
-
+import os
 import re
 import pandas as pd
 from typing import List, Optional
@@ -64,7 +64,6 @@ def _is_empty(val) -> bool:
         return True
     return False
 
-#working but hyperlink is still missing
 def remerge_by_filename(
     df: pd.DataFrame,
     filename_col: Optional[str]
@@ -72,8 +71,9 @@ def remerge_by_filename(
     """
     For rows where number_1 exists but number_2/3 are blank,
     extract a candidate from the filename, find that in number_2/3
-    elsewhere, copy only into truly empty target cells, mark
-    them Remerged=True, then drop the original orphan.
+    **only among rows that originally had no number_1**, copy into
+    truly-empty target cells, mark them Remerged=True, then drop
+    the original orphan row.
     """
     if not filename_col or filename_col not in df.columns:
         df["Remerged"] = False
@@ -87,23 +87,28 @@ def remerge_by_filename(
     for idx, row in df.iterrows():
         n1 = str(row.get("number_1", "")).strip()
         fn = str(row.get(filename_col, "")).strip()
+        # strip extension (so `.pdf` / etc. doesn’t pollute our tokenization)
+        fn_base, _ = os.path.splitext(fn)
 
-        # skip if no drawing num or already had number_2/3
+        # only look at orphans: have a number_1 but no number_2/3 yet
         if not n1 or (not _is_empty(row.get("number_2"))) or (has3 and not _is_empty(row.get("number_3"))):
             continue
 
-        # build candidate from filename
+        # build our “drawing” candidate from the filename
         token_count = len(n1.split("-"))
-        cand = extract_drawing_from_filename(fn, token_count)
+        cand = extract_drawing_from_filename(fn_base, token_count)
 
-        # look in number_2 then number_3
+        # now look in number_2 → number_3, but only among rows whose number_1 was blank
         for num_col in ("number_2", "number_3") if has3 else ("number_2",):
-            matches = df[df[num_col].astype(str).str.strip() == cand]
+            matches = df[
+                (df[num_col].astype(str).str.strip() == cand) &
+                (df["number_1"].astype(str).str.strip() == "")
+            ]
             if matches.empty:
                 continue
 
             target = matches.index[0]
-            # copy only into truly empty cells
+            # copy **only** into truly-empty cells
             for col in df.columns:
                 if col in (
                     "number_1", "number_2", "number_3",
@@ -116,12 +121,11 @@ def remerge_by_filename(
                 if not _is_empty(src) and _is_empty(tgt):
                     df.at[target, col] = src
 
-            # fix common_ref & mark
+            # now fix up our numbers & flags
             df.at[target, "number_1"] = n1
             df.at[target, "common_ref"] = cand
             df.at[target, "Remerged"] = True
-
-            # preserve the sheet-1 original_row_index so hyperlinks will follow
+            # **preserve** the original_row_index so hyperlinks stick
             df.at[target, "original_row_index"] = row["original_row_index"]
 
             to_drop.append(idx)
