@@ -4,12 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b5c63e04-363d-4d46-a21d-1da1d6523a4a" name="Changes" comment="- fixed remerge by filename">
-      <change afterPath="$PROJECT_DIR$/hook-tkinterdnd2.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/core/formatter.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/formatter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gui/merger_gui.py" beforeDir="false" afterPath="$PROJECT_DIR$/gui/merger_gui.py" afterDir="false" />
-    </list>
+    <list default="true" id="b5c63e04-363d-4d46-a21d-1da1d6523a4a" name="Changes" comment="- added trash button" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -25,6 +20,12 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/r-Yayap/Conflux.git",
+    "accountId": "1e284a14-2e68-4218-b90d-a4f7ffa6be65"
+  }
+}]]></component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 3
 }</component>
@@ -217,7 +218,15 @@
       <option name="project" value="LOCAL" />
       <updated>1751522510498</updated>
     </task>
-    <option name="localTasksCounter" value="16" />
+    <task id="LOCAL-00016" summary="- added trash button">
+      <option name="closed" value="true" />
+      <created>1752579020162</created>
+      <option name="number" value="00016" />
+      <option name="presentableId" value="LOCAL-00016" />
+      <option name="project" value="LOCAL" />
+      <updated>1752579020162</updated>
+    </task>
+    <option name="localTasksCounter" value="17" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -235,7 +244,8 @@
     <MESSAGE value="open file" />
     <MESSAGE value="some stuff" />
     <MESSAGE value="- fixed remerge by filename" />
-    <option name="LAST_COMMIT_MESSAGE" value="- fixed remerge by filename" />
+    <MESSAGE value="- added trash button" />
+    <option name="LAST_COMMIT_MESSAGE" value="- added trash button" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
