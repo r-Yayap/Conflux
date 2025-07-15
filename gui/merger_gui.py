@@ -51,7 +51,7 @@ class MergerGUI:
         # Use our custom CTkDnD main window for drag-and-drop support.
         self.mergerApp = CTkDnD() if master is None else ctk.CTkToplevel(master)
         self.mergerApp.title("Conflux")
-        self.mergerApp.iconbitmap(resource_path("style/xtractor-logo.ico"))
+        self.mergerApp.iconbitmap(resource_path("style/conflux-logo.ico"))
 
         # File paths for three Excel files and the output file.
         self.excel1_path = tk.StringVar()
@@ -78,6 +78,9 @@ class MergerGUI:
         self.excel1_headers = []
         self.excel2_headers = []
         self.excel3_headers = []
+
+        # for resetting
+        self.preview_values_by_column = {}
 
         self._build_gui()
 
@@ -137,6 +140,20 @@ class MergerGUI:
         # Enable drag and drop on Excel1 button.
         self.excel1_button.drop_target_register(DND_ALL)
         self.excel1_button.dnd_bind('<<Drop>>', self.drop_excel1)
+        # Reset Button
+        self.reset1_btn = ctk.CTkButton(
+            parent_frame,
+            text="🗑",
+            width=30, height=30,
+            fg_color="transparent",  # ← transparent base
+            bg_color="#990D10",
+            hover_color=("#666666", "#999999"),  # subtle grey on hover; pick any
+            text_color=("#333333", "#FFFFFF"),  # dark-mode / light-mode glyph tint
+            border_width=0,  # no outline
+            corner_radius=0,  # square to match glyph bounds
+            command=self._reset_excel1)
+        self.reset1_btn.place_forget()
+
         ctk.CTkLabel(parent_frame, text="Reference Column:", font=(font_name, font_size)).grid(
             row=1, column=0, padx=5, pady=2, sticky="e")
         self.ref_option_menu1 = ctk.CTkOptionMenu(parent_frame, variable=self.ref_column1, values=[])
@@ -164,6 +181,21 @@ class MergerGUI:
         self.excel2_button.grid(row=0, column=0, columnspan=2, padx=33, pady=33, sticky="ew")
         self.excel2_button.drop_target_register(DND_ALL)
         self.excel2_button.dnd_bind('<<Drop>>', self.drop_excel2)
+
+        # Reset Button
+        self.reset2_btn = ctk.CTkButton(
+            parent_frame,
+            text="🗑",
+            width=30, height=30,
+            fg_color="transparent",  # ← transparent base
+            bg_color="#990D10",
+            hover_color=("#666666", "#999999"),  # subtle grey on hover; pick any
+            text_color=("#333333", "#FFFFFF"),  # dark-mode / light-mode glyph tint
+            border_width=0,  # no outline
+            corner_radius=0,  # square to match glyph bounds
+            command=self._reset_excel2)
+        self.reset2_btn.place_forget()
+
         ctk.CTkLabel(parent_frame, text="Reference Column:", font=(font_name, font_size)).grid(
             row=1, column=0, padx=5, pady=2, sticky="e")
         self.ref_option_menu2 = ctk.CTkOptionMenu(parent_frame, variable=self.ref_column2, values=[])
@@ -194,6 +226,21 @@ class MergerGUI:
         self.excel3_button.grid(row=0, column=0, columnspan=2, padx=33, pady=33, sticky="ew")
         self.excel3_button.drop_target_register(DND_ALL)
         self.excel3_button.dnd_bind('<<Drop>>', self.drop_excel3)
+
+        # Reset Button
+        self.reset3_btn = ctk.CTkButton(
+            parent_frame,
+            text="🗑",
+            width=30, height=30,
+            fg_color="transparent",  # ← transparent base
+            bg_color="#990D10",
+            hover_color=("#666666", "#999999"),  # subtle grey on hover; pick any
+            text_color=("#333333", "#FFFFFF"),  # dark-mode / light-mode glyph tint
+            border_width=0,  # no outline
+            corner_radius=0,  # square to match glyph bounds
+            command=self._reset_excel3)
+        self.reset3_btn.place_forget()
+
         ctk.CTkLabel(parent_frame, text="Reference Column:", font=(font_name, font_size)).grid(
             row=1, column=0, padx=5, pady=2, sticky="e")
         self.ref_option_menu3 = ctk.CTkOptionMenu(parent_frame, variable=self.ref_column3, values=[])
@@ -206,6 +253,71 @@ class MergerGUI:
             row=3, column=0, padx=5, pady=2, sticky="e")
         self.title_option_menu3 = ctk.CTkOptionMenu(parent_frame, variable=self.title_column3, values=[], state="disabled")
         self.title_option_menu3.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
+
+    def _reset_excel1(self):
+        """Return Excel-1 slot to its pristine state."""
+        self.excel1_path.set("")
+        self.excel1_button.configure(
+            text="\n➕\n\nSelect Extracted Excel or\nDrag & Drop Here",
+            fg_color="transparent"
+        )
+        self.excel1_headers = []
+        self.preview_values_by_column = {}
+
+        # option-menus & vars
+        for var in (self.ref_column1, self.title_column1):
+            var.set("")
+        self.ref_option_menu1.configure(values=[], state="disabled")
+        self.title_option_menu1.configure(values=[], state="disabled")
+
+        # checks that piggy-back on Excel-1 headers
+        for w in (
+                self.status_dropdown, self.project_dropdown,
+                self.filename_dropdown
+        ):
+            w.configure(values=[])
+        for var in (
+                self.status_column, self.status_value,
+                self.project_column, self.project_value,
+                self.filename_column
+        ):
+            var.set("")
+
+        # custom checks dropdowns
+        for _, col_var, _, dropdown, combo in self.custom_checks:
+            col_var.set("")
+            dropdown.configure(values=[])
+            combo.configure(values=[])
+
+        self.reset1_btn.place_forget()
+
+    def _reset_excel2(self):
+        self.excel2_path.set("")
+        self.excel2_button.configure(
+            text="\n➕\n\nSelect DC_LOD Excel or\nDrag & Drop Here",
+            fg_color="transparent"
+        )
+        self.excel2_headers = []
+        for var in (self.ref_column2, self.title_column2):
+            var.set("")
+        self.ref_option_menu2.configure(values=[], state="disabled")
+        self.title_option_menu2.configure(values=[], state="disabled")
+
+        self.reset2_btn.place_forget()
+
+    def _reset_excel3(self):
+        self.excel3_path.set("")
+        self.excel3_button.configure(
+            text="\n➕\n\nSelect DD_LOD Excel or\nDrag & Drop Here",
+            fg_color="transparent"
+        )
+        self.excel3_headers = []
+        for var in (self.ref_column3, self.title_column3):
+            var.set("")
+        self.ref_option_menu3.configure(values=[], state="disabled")
+        self.title_option_menu3.configure(values=[], state="disabled")
+
+        self.reset3_btn.place_forget()
 
     def _build_comparison_checks(self, parent_frame):
         """Builds the checkboxes, dropdowns, and textboxes for additional validation."""
@@ -521,6 +633,12 @@ class MergerGUI:
                 dropdown_widget.configure(values=headers)  # Populate dropdown options
                 column_var.set(auto_select_header(headers, ["status", "project"]))  # Auto-select if applicable
 
+            # Pin Reset Button
+            self.reset1_btn.place(
+                in_=self.excel1_button,  # pin to Select-button corner
+                relx=1.0, rely=0.0, x=-5, y=5, anchor="ne"
+            )
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load headers from Excel File 1: {e}")
 
@@ -533,6 +651,13 @@ class MergerGUI:
             self.title_option_menu2.configure(values=headers)
             self.ref_column2.set(auto_select_header(headers, ["drawing", "sheet", "ref", "number"]))
             self.title_column2.set(auto_select_header(headers, ["title"]))
+
+            # Pin Reset Button
+            self.reset2_btn.place(
+                in_=self.excel2_button,  # pin to Select-button corner
+                relx=1.0, rely=0.0, x=-5, y=5, anchor="ne"
+            )
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load headers from Excel File 2: {e}")
 
@@ -545,6 +670,13 @@ class MergerGUI:
             self.title_option_menu3.configure(values=headers)
             self.ref_column3.set(auto_select_header(headers, ["drawing", "sheet", "ref", "number"]))
             self.title_column3.set(auto_select_header(headers, ["title"]))
+
+            # Pin Reset Button
+            self.reset3_btn.place(
+                in_=self.excel3_button,  # pin to Select-button corner
+                relx=1.0, rely=0.0, x=-5, y=5, anchor="ne"
+            )
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load headers from Excel File 3: {e}")
 

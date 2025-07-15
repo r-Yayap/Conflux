@@ -4,11 +4,11 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b5c63e04-363d-4d46-a21d-1da1d6523a4a" name="Changes" comment="some stuff">
+    <list default="true" id="b5c63e04-363d-4d46-a21d-1da1d6523a4a" name="Changes" comment="- fixed remerge by filename">
+      <change afterPath="$PROJECT_DIR$/hook-tkinterdnd2.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/core/formatter.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/formatter.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/core/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/utils.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/core/validators.py" beforeDir="false" afterPath="$PROJECT_DIR$/core/validators.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/gui/merger_gui.py" beforeDir="false" afterPath="$PROJECT_DIR$/gui/merger_gui.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -43,11 +43,12 @@
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
     "git-widget-placeholder": "master",
-    "last_opened_file_path": "C:/Users/dae0519/Desktop/RRR/_PyProject/Conflux/core"
+    "last_opened_file_path": "C:/Users/dae0519/Desktop/RRR/_PyProject/Conflux"
   }
 }]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\dae0519\Desktop\RRR\_PyProject\Conflux" />
       <recent name="C:\Users\dae0519\Desktop\RRR\_PyProject\Conflux\core" />
     </key>
   </component>
@@ -208,7 +209,15 @@
       <option name="project" value="LOCAL" />
       <updated>1750924957352</updated>
     </task>
-    <option name="localTasksCounter" value="15" />
+    <task id="LOCAL-00015" summary="- fixed remerge by filename">
+      <option name="closed" value="true" />
+      <created>1751522510496</created>
+      <option name="number" value="00015" />
+      <option name="presentableId" value="LOCAL-00015" />
+      <option name="project" value="LOCAL" />
+      <updated>1751522510498</updated>
+    </task>
+    <option name="localTasksCounter" value="16" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -225,7 +234,8 @@
     <MESSAGE value="dropped columns" />
     <MESSAGE value="open file" />
     <MESSAGE value="some stuff" />
-    <option name="LAST_COMMIT_MESSAGE" value="some stuff" />
+    <MESSAGE value="- fixed remerge by filename" />
+    <option name="LAST_COMMIT_MESSAGE" value="- fixed remerge by filename" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -242,7 +252,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/gui/merger_gui.py</url>
-          <line>467</line>
+          <line>579</line>
           <option name="timeStamp" value="14" />
         </line-breakpoint>
       </breakpoints>
