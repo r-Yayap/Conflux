@@ -11,6 +11,10 @@ from .merge_service import merge_dataframes  # pure merge of DataFrames
 from .validators import apply_validators, CheckConfig  # populates Comments_1
 from .formatter import write_styled_excel  # writes Excel with formatting, rich-text, hyperlinks
 from .utils import add_title_match_column, remerge_by_filename
+from .revision_checker import (
+    RevCheckSettings,
+    apply_revision_checks,
+)
 
 class MergerFacade:
     """
@@ -24,7 +28,8 @@ class MergerFacade:
         output_path: str,
         *,
         title_columns: Optional[List[str]]  = None,
-        check_config:  Optional[CheckConfig] = None
+        check_config:  Optional[CheckConfig] = None,
+        rev_check_settings: Optional[RevCheckSettings] = None,
     ) -> pd.DataFrame:
 
         # 1) Read input files (and extract hyperlinks & original_row_index)
@@ -82,6 +87,10 @@ class MergerFacade:
         # 3) Apply validation rules (Comments_1, status/project/custom/filename checks)
         if check_config:
             merged_df = apply_validators(merged_df, check_config)
+
+        # 3.b) Apply revision checker logic (Comments-Revision + highlights)
+        merged_df, revision_highlights = apply_revision_checks(merged_df, rev_check_settings)
+        metadata["revision_highlights"] = revision_highlights
 
         # 4) Prepare the *renamed* title column names for styling
         renamed_titles: List[str] = []

@@ -1,6 +1,6 @@
 # core/formatter.py
 import os
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 import pandas as pd
 import re
 from openpyxl import load_workbook
@@ -37,8 +37,11 @@ def write_styled_excel(
     # 6. Title-to-title rich-text diffing
     apply_title_highlighting(ws, merged_df, title_columns)
 
+    # 7. Revision-specific highlighting
+    apply_revision_highlighting(ws, metadata.get("revision_highlights", {}))
 
-    # 7. Save & close
+
+    # 8. Save & close
     wb.save(output_path)
     wb.close()
 
@@ -48,7 +51,11 @@ def reorder_columns(ws: Worksheet) -> None:
     data = list(ws.iter_rows(min_row=2, values_only=True))
 
     title_cols = [c for c in ["title_excel1", "title_excel2", "title_excel3"] if c in original_headers]
-    final_cols = [c for c in ["title_match", "Comments_1", "Instance", "Case","Remerged","Duplicate"] if c in original_headers]
+    final_cols = [
+        c
+        for c in ["title_match", "Comments-Revision", "Comments_1", "Instance", "Case", "Remerged", "Duplicate"]
+        if c in original_headers
+    ]
 
     # add your internal columns to excluded so they get dropped:
     excluded = set(title_cols) | set(final_cols) | {"common_ref", "original_row_index", "original_row_index_3", "original_row_index_2"}
@@ -510,3 +517,23 @@ def apply_title_highlighting(
             # write back
             ws.cell(row=excel_row, column=base_idx).value = rich1
             ws.cell(row=excel_row, column=other_idx).value = rich2
+
+
+def apply_revision_highlighting(
+    ws: Worksheet,
+    revision_highlights: Dict[int, Dict[str, List[Tuple[str, str]]]],
+) -> None:
+    if not revision_highlights:
+        return
+
+    for df_row_idx, column_map in revision_highlights.items():
+        excel_row = df_row_idx + 2
+        for column_name, segments in column_map.items():
+            col_idx = get_ws_column_index(ws, column_name)
+            if col_idx is None:
+                continue
+            rich = CellRichText()
+            for text, color in segments:
+                font = InlineFont(rFont="Calibri", sz=11, color=color)
+                rich.append(TextBlock(font, text))
+            ws.cell(row=excel_row, column=col_idx).value = rich

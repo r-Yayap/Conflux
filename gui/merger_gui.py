@@ -1,16 +1,19 @@
 # Conflux V1
 import os
+import re
 import tkinter as tk
 import sys
 import customtkinter as ctk
 import pandas as pd
 import traceback
+from typing import List, Optional
 from tkinter import filedialog, messagebox
 from datetime import datetime
 from tkinterdnd2 import TkinterDnD, DND_ALL
 
 from core.merger import MergerFacade
 from core.validators import CheckConfig
+from core.revision_checker import CustomPatternConfig, RevCheckSettings
 
 def resource_path(relative_path):
     """Get the absolute path to a resource (used for PyInstaller compatibility)"""
@@ -82,6 +85,34 @@ class MergerGUI:
         # for resetting
         self.preview_values_by_column = {}
 
+        # Revision checker state
+        self.rev_pattern_lock = tk.BooleanVar(value=True)
+        self.rev_pattern_mode = tk.StringVar(value="Incremental")
+        self.rev_pattern_choice = tk.StringVar(value="P0x")
+        self.rev_fixed_tag = tk.StringVar()
+        self.rev_custom_prefix = tk.StringVar()
+        self.rev_custom_regex = tk.StringVar(value=r"(\d+)")
+        self.rev_custom_padding = tk.StringVar(value="2")
+        self.rev_custom_base = tk.StringVar(value="10")
+        self.rev_custom_start = tk.StringVar(value="0")
+        self.rev_custom_step = tk.StringVar(value="1")
+
+        self.rev_latest_desc_enabled = tk.BooleanVar(value=False)
+        self.rev_latest_desc_value = tk.StringVar()
+
+        self.rev_date_enabled = tk.BooleanVar(value=False)
+        self.rev_date_strict = tk.BooleanVar(value=False)
+        self.rev_date_format_choice = tk.StringVar(value="DD/MM/YYYY")
+        self.rev_date_custom_format = tk.StringVar()
+        self.rev_latest_date_value = tk.StringVar()
+
+        self.rev_input1_columns: List[str] = []
+        self.rev_input1_label_text = tk.StringVar(value="Rev columns: not detected")
+        self.rev_input2_start = tk.StringVar()
+        self.rev_input2_end = tk.StringVar()
+        self.rev_input2_range_label = tk.StringVar(value="No range selected")
+        self.rev_generate_latest = tk.BooleanVar(value=True)
+
         self._build_gui()
 
     def _build_gui(self):
@@ -118,9 +149,14 @@ class MergerGUI:
         self.filename_frame.grid(row=1, column=2, padx=10, pady=(10, 10), sticky="nsew")
         self._build_filename_checker(self.filename_frame)
 
+        # Revision checker frame
+        self.revision_frame = ctk.CTkFrame(self.mergerApp)
+        self.revision_frame.grid(row=2, column=0, columnspan=3, padx=10, pady=(5, 10), sticky="nsew")
+        self._build_revision_checker(self.revision_frame)
+
         # Create controls frame (move down)
         self.controls_frame = ctk.CTkFrame(self.mergerApp)
-        self.controls_frame.grid(row=2, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
+        self.controls_frame.grid(row=3, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
         self._build_controls(self.controls_frame)
 
     def _build_excel1_section(self, parent_frame):
@@ -289,6 +325,9 @@ class MergerGUI:
             dropdown.configure(values=[])
             combo.configure(values=[])
 
+        self.rev_input1_columns = []
+        self.rev_input1_label_text.set("Rev columns: not detected")
+
         self.reset1_btn.place_forget()
 
     def _reset_excel2(self):
@@ -302,6 +341,12 @@ class MergerGUI:
             var.set("")
         self.ref_option_menu2.configure(values=[], state="disabled")
         self.title_option_menu2.configure(values=[], state="disabled")
+
+        self.rev_input2_start.set("")
+        self.rev_input2_end.set("")
+        self.rev_input2_start_menu.configure(values=[], state="disabled")
+        self.rev_input2_end_menu.configure(values=[], state="disabled")
+        self._update_revision_range_label()
 
         self.reset2_btn.place_forget()
 
@@ -409,6 +454,255 @@ class MergerGUI:
         self.filename_dropdown = ctk.CTkOptionMenu(parent_frame, variable=self.filename_column, values=[],
                                                    state="disabled")
         self.filename_dropdown.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+
+    def _build_revision_checker(self, parent_frame):
+        parent_frame.grid_columnconfigure(0, weight=1)
+        header_font = ("Helvetica", 13, "bold")
+        body_font = ("Helvetica", 11)
+
+        ctk.CTkLabel(parent_frame, text="Revision Checker", font=header_font).grid(
+            row=0, column=0, padx=5, pady=(5, 2), sticky="w"
+        )
+
+        # Helper 1 – Revision Pattern
+        helper1 = ctk.CTkFrame(parent_frame)
+        helper1.grid(row=1, column=0, padx=5, pady=5, sticky="ew")
+        helper1.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkCheckBox(
+            helper1,
+            text="Helper Logic 1 – Revision Pattern",
+            variable=self.rev_pattern_lock,
+            state="disabled",
+        ).grid(row=0, column=0, columnspan=2, padx=5, pady=(5, 2), sticky="w")
+
+        ctk.CTkLabel(helper1, text="Mode:", font=body_font).grid(row=1, column=0, padx=5, pady=2, sticky="e")
+        self.rev_pattern_mode_option = ctk.CTkOptionMenu(
+            helper1,
+            variable=self.rev_pattern_mode,
+            values=["Incremental", "Non-incremental"],
+            command=lambda _=None: self._update_revision_pattern_controls(),
+        )
+        self.rev_pattern_mode_option.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+
+        ctk.CTkLabel(helper1, text="Pattern:", font=body_font).grid(row=2, column=0, padx=5, pady=2, sticky="e")
+        self.rev_pattern_choice_menu = ctk.CTkOptionMenu(
+            helper1,
+            variable=self.rev_pattern_choice,
+            values=["P0x", "XX", "Alphabet Only", "IFC (DAE)", "Custom"],
+            command=lambda _=None: self._update_revision_pattern_controls(),
+        )
+        self.rev_pattern_choice_menu.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+
+        ctk.CTkLabel(helper1, text="Fixed Revision:", font=body_font).grid(
+            row=3, column=0, padx=5, pady=2, sticky="e"
+        )
+        self.rev_fixed_entry = ctk.CTkEntry(helper1, textvariable=self.rev_fixed_tag)
+        self.rev_fixed_entry.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
+
+        self.rev_custom_frame = ctk.CTkFrame(helper1)
+        self.rev_custom_frame.grid(row=4, column=0, columnspan=2, padx=5, pady=(5, 5), sticky="ew")
+        self.rev_custom_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(self.rev_custom_frame, text="Prefix:", font=body_font).grid(
+            row=0, column=0, padx=5, pady=2, sticky="e"
+        )
+        self.rev_custom_prefix_entry = ctk.CTkEntry(self.rev_custom_frame, textvariable=self.rev_custom_prefix)
+        self.rev_custom_prefix_entry.grid(row=0, column=1, padx=5, pady=2, sticky="ew")
+
+        ctk.CTkLabel(self.rev_custom_frame, text="Core Regex:", font=body_font).grid(
+            row=1, column=0, padx=5, pady=2, sticky="e"
+        )
+        self.rev_custom_regex_entry = ctk.CTkEntry(self.rev_custom_frame, textvariable=self.rev_custom_regex)
+        self.rev_custom_regex_entry.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+
+        ctk.CTkLabel(self.rev_custom_frame, text="Padding:", font=body_font).grid(
+            row=2, column=0, padx=5, pady=2, sticky="e"
+        )
+        self.rev_custom_padding_entry = ctk.CTkEntry(self.rev_custom_frame, textvariable=self.rev_custom_padding)
+        self.rev_custom_padding_entry.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+
+        ctk.CTkLabel(self.rev_custom_frame, text="Base:", font=body_font).grid(
+            row=3, column=0, padx=5, pady=2, sticky="e"
+        )
+        self.rev_custom_base_menu = ctk.CTkOptionMenu(
+            self.rev_custom_frame,
+            variable=self.rev_custom_base,
+            values=["10", "26"],
+            command=lambda _=None: None,
+        )
+        self.rev_custom_base_menu.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
+
+        ctk.CTkLabel(self.rev_custom_frame, text="Start:", font=body_font).grid(
+            row=4, column=0, padx=5, pady=2, sticky="e"
+        )
+        self.rev_custom_start_entry = ctk.CTkEntry(self.rev_custom_frame, textvariable=self.rev_custom_start)
+        self.rev_custom_start_entry.grid(row=4, column=1, padx=5, pady=2, sticky="ew")
+
+        ctk.CTkLabel(self.rev_custom_frame, text="Step:", font=body_font).grid(
+            row=5, column=0, padx=5, pady=2, sticky="e"
+        )
+        self.rev_custom_step_entry = ctk.CTkEntry(self.rev_custom_frame, textvariable=self.rev_custom_step)
+        self.rev_custom_step_entry.grid(row=5, column=1, padx=5, pady=(2, 5), sticky="ew")
+
+        # Helper 2 – Latest Description
+        helper2 = ctk.CTkFrame(parent_frame)
+        helper2.grid(row=2, column=0, padx=5, pady=5, sticky="ew")
+        helper2.grid_columnconfigure(0, weight=1)
+
+        self.rev_latest_desc_checkbox = ctk.CTkCheckBox(
+            helper2,
+            text="Helper Logic 2 – Compare description of the latest revision",
+            variable=self.rev_latest_desc_enabled,
+            command=self._update_revision_latest_desc,
+        )
+        self.rev_latest_desc_checkbox.grid(row=0, column=0, padx=5, pady=(5, 2), sticky="w")
+
+        self.rev_latest_desc_entry = ctk.CTkEntry(helper2, textvariable=self.rev_latest_desc_value)
+        self.rev_latest_desc_entry.grid(row=1, column=0, padx=5, pady=(0, 5), sticky="ew")
+
+        # Helper 3 – Date Pattern & Latest Date
+        helper3 = ctk.CTkFrame(parent_frame)
+        helper3.grid(row=3, column=0, padx=5, pady=5, sticky="ew")
+        helper3.grid_columnconfigure(1, weight=1)
+
+        self.rev_date_enabled_checkbox = ctk.CTkCheckBox(
+            helper3,
+            text="Helper Logic 3 – Validate dates",
+            variable=self.rev_date_enabled,
+            command=self._update_revision_date_controls,
+        )
+        self.rev_date_enabled_checkbox.grid(row=0, column=0, columnspan=2, padx=5, pady=(5, 2), sticky="w")
+
+        self.rev_date_strict_checkbox = ctk.CTkCheckBox(
+            helper3,
+            text="Strict format",
+            variable=self.rev_date_strict,
+            command=self._update_revision_date_controls,
+        )
+        self.rev_date_strict_checkbox.grid(row=1, column=0, padx=5, pady=2, sticky="w")
+
+        ctk.CTkLabel(helper3, text="Format:", font=body_font).grid(row=1, column=1, padx=5, pady=2, sticky="e")
+        self.rev_date_format_menu = ctk.CTkOptionMenu(
+            helper3,
+            variable=self.rev_date_format_choice,
+            values=["DD/MM/YY", "DD/MM/YYYY", "DD-MMM-YYYY", "YYYY-MM-DD", "Custom"],
+            command=lambda _=None: self._update_revision_date_controls(),
+        )
+        self.rev_date_format_menu.grid(row=1, column=2, padx=5, pady=2, sticky="ew")
+
+        ctk.CTkLabel(helper3, text="Custom Format:", font=body_font).grid(row=2, column=1, padx=5, pady=2, sticky="e")
+        self.rev_date_custom_entry = ctk.CTkEntry(helper3, textvariable=self.rev_date_custom_format)
+        self.rev_date_custom_entry.grid(row=2, column=2, padx=5, pady=2, sticky="ew")
+
+        ctk.CTkLabel(helper3, text="Latest Revision Date:", font=body_font).grid(
+            row=3, column=0, padx=5, pady=2, sticky="w"
+        )
+        self.rev_latest_date_entry = ctk.CTkEntry(helper3, textvariable=self.rev_latest_date_value)
+        self.rev_latest_date_entry.grid(row=3, column=1, columnspan=2, padx=5, pady=(0, 5), sticky="ew")
+
+        # Helper 4 – Excel Table Pointers
+        helper4 = ctk.CTkFrame(parent_frame)
+        helper4.grid(row=4, column=0, padx=5, pady=5, sticky="ew")
+        helper4.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(helper4, text="Helper Logic 4 – Excel Table Pointers", font=body_font).grid(
+            row=0, column=0, columnspan=2, padx=5, pady=(5, 2), sticky="w"
+        )
+
+        self.rev_input1_label = ctk.CTkLabel(helper4, textvariable=self.rev_input1_label_text, justify="left")
+        self.rev_input1_label.grid(row=1, column=0, columnspan=2, padx=5, pady=2, sticky="w")
+
+        ctk.CTkLabel(helper4, text="Excel 2 Start Column:", font=body_font).grid(
+            row=2, column=0, padx=5, pady=2, sticky="e"
+        )
+        self.rev_input2_start_menu = ctk.CTkOptionMenu(
+            helper4,
+            variable=self.rev_input2_start,
+            values=[],
+            state="disabled",
+            command=lambda _=None: self._update_revision_range_label(),
+        )
+        self.rev_input2_start_menu.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+
+        ctk.CTkLabel(helper4, text="Excel 2 End Column:", font=body_font).grid(
+            row=3, column=0, padx=5, pady=2, sticky="e"
+        )
+        self.rev_input2_end_menu = ctk.CTkOptionMenu(
+            helper4,
+            variable=self.rev_input2_end,
+            values=[],
+            state="disabled",
+            command=lambda _=None: self._update_revision_range_label(),
+        )
+        self.rev_input2_end_menu.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
+
+        self.rev_input2_range_display = ctk.CTkLabel(
+            helper4,
+            textvariable=self.rev_input2_range_label,
+            justify="left",
+        )
+        self.rev_input2_range_display.grid(row=4, column=0, columnspan=2, padx=5, pady=2, sticky="w")
+
+        self.rev_generate_latest_check = ctk.CTkCheckBox(
+            helper4,
+            text="Generate latest revision for Input 2?",
+            variable=self.rev_generate_latest,
+        )
+        self.rev_generate_latest_check.grid(row=5, column=0, columnspan=2, padx=5, pady=(2, 5), sticky="w")
+
+        # Initial state synchronisation
+        self.rev_pattern_mode.trace_add("write", lambda *_: self._update_revision_pattern_controls())
+        self.rev_pattern_choice.trace_add("write", lambda *_: self._update_revision_pattern_controls())
+        self.rev_latest_desc_enabled.trace_add("write", lambda *_: self._update_revision_latest_desc())
+        self.rev_date_enabled.trace_add("write", lambda *_: self._update_revision_date_controls())
+        self.rev_date_strict.trace_add("write", lambda *_: self._update_revision_date_controls())
+        self.rev_date_format_choice.trace_add("write", lambda *_: self._update_revision_date_controls())
+        self.rev_input2_start.trace_add("write", lambda *_: self._update_revision_range_label())
+        self.rev_input2_end.trace_add("write", lambda *_: self._update_revision_range_label())
+
+        self._update_revision_pattern_controls()
+        self._update_revision_latest_desc()
+        self._update_revision_date_controls()
+        self._update_revision_range_label()
+
+    def _update_revision_pattern_controls(self):
+        is_incremental = self.rev_pattern_mode.get().lower().startswith("incremental")
+        self.rev_pattern_choice_menu.configure(state="normal" if is_incremental else "disabled")
+        self.rev_fixed_entry.configure(state="disabled" if is_incremental else "normal")
+
+        show_custom = is_incremental and self.rev_pattern_choice.get().lower() == "custom"
+        if show_custom:
+            self.rev_custom_frame.grid()
+        else:
+            self.rev_custom_frame.grid_remove()
+
+    def _update_revision_latest_desc(self, *_args):
+        state = "normal" if self.rev_latest_desc_enabled.get() else "disabled"
+        self.rev_latest_desc_entry.configure(state=state)
+
+    def _update_revision_date_controls(self, *_args):
+        enabled = self.rev_date_enabled.get()
+        strict = enabled and self.rev_date_strict.get()
+
+        self.rev_date_strict_checkbox.configure(state="normal" if enabled else "disabled")
+        if not enabled:
+            self.rev_date_strict.set(False)
+
+        self.rev_date_format_menu.configure(state="normal" if strict else "disabled")
+        custom_selected = strict and self.rev_date_format_choice.get() == "Custom"
+        self.rev_date_custom_entry.configure(state="normal" if custom_selected else "disabled")
+        self.rev_latest_date_entry.configure(state="normal" if enabled else "disabled")
+
+    def _update_revision_range_label(self, *_args):
+        start = self.rev_input2_start.get().strip()
+        end = self.rev_input2_end.get().strip()
+        if start and end:
+            self.rev_input2_range_label.set(f"Range: {start} → {end}")
+        elif start or end:
+            self.rev_input2_range_label.set(f"Range: {start or '?'} → {end or '?'}")
+        else:
+            self.rev_input2_range_label.set("No range selected")
 
     def _build_controls(self, parent_frame):
         font_name = "Helvetica"
@@ -639,6 +933,15 @@ class MergerGUI:
                 relx=1.0, rely=0.0, x=-5, y=5, anchor="ne"
             )
 
+            rev_pattern = re.compile(r"^rev\d+", re.IGNORECASE)
+            self.rev_input1_columns = [h for h in headers if rev_pattern.match(str(h))]
+            if self.rev_input1_columns:
+                self.rev_input1_label_text.set(
+                    "Rev columns: " + ", ".join(self.rev_input1_columns)
+                )
+            else:
+                self.rev_input1_label_text.set("Rev columns: not detected")
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load headers from Excel File 1: {e}")
 
@@ -652,11 +955,22 @@ class MergerGUI:
             self.ref_column2.set(auto_select_header(headers, ["drawing", "sheet", "ref", "number"]))
             self.title_column2.set(auto_select_header(headers, ["title"]))
 
+            self.rev_input2_start_menu.configure(values=headers, state="normal")
+            self.rev_input2_end_menu.configure(values=headers, state="normal")
+            if headers:
+                self.rev_input2_start.set(headers[0])
+                self.rev_input2_end.set(headers[-1])
+            else:
+                self.rev_input2_start.set("")
+                self.rev_input2_end.set("")
+
             # Pin Reset Button
             self.reset2_btn.place(
                 in_=self.excel2_button,  # pin to Select-button corner
                 relx=1.0, rely=0.0, x=-5, y=5, anchor="ne"
             )
+
+            self._update_revision_range_label()
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load headers from Excel File 2: {e}")
@@ -686,6 +1000,96 @@ class MergerGUI:
             directory, file_name = os.path.split(excel1)
             name, ext = os.path.splitext(file_name)
             self.output_path.set(os.path.join(directory, f"{name}_merged{ext}"))
+
+    def _collect_revision_settings(self) -> Optional[RevCheckSettings]:
+        if not self.rev_input1_columns:
+            return None
+
+        start_col = self.rev_input2_start.get().strip()
+        end_col = self.rev_input2_end.get().strip()
+        if not start_col or not end_col:
+            return None
+
+        headers = self.excel2_headers or []
+        try:
+            start_idx = headers.index(start_col)
+            end_idx = headers.index(end_col)
+        except ValueError:
+            messagebox.showerror("Revision Checker", "Selected revision columns were not found in Excel 2.")
+            return None
+
+        if start_idx > end_idx:
+            messagebox.showerror("Revision Checker", "Revision start column must come before the end column.")
+            return None
+
+        block_cols = headers[start_idx:end_idx + 1]
+        if not block_cols:
+            return None
+
+        pattern_mode = "incremental" if self.rev_pattern_mode.get().lower().startswith("incremental") else "non-incremental"
+        fixed_tag = self.rev_fixed_tag.get().strip() or None
+
+        date_format = None
+        if self.rev_date_enabled.get() and self.rev_date_strict.get():
+            choice = self.rev_date_format_choice.get()
+            if choice == "Custom":
+                date_format = self.rev_date_custom_format.get().strip()
+                if not date_format:
+                    messagebox.showerror("Revision Checker", "Please provide a custom date format string.")
+                    return None
+            else:
+                date_format = choice
+
+        latest_desc_val = self.rev_latest_desc_value.get().strip() or None
+        latest_date_val = self.rev_latest_date_value.get().strip() or None
+
+        settings = RevCheckSettings(
+            pattern_mode=pattern_mode,
+            pattern_choice=self.rev_pattern_choice.get(),
+            fixed_revision=fixed_tag,
+            latest_desc_enabled=self.rev_latest_desc_enabled.get(),
+            latest_desc_value=latest_desc_val if self.rev_latest_desc_enabled.get() else None,
+            date_enabled=self.rev_date_enabled.get(),
+            date_strict=self.rev_date_strict.get(),
+            date_format=date_format,
+            latest_date_value=latest_date_val if self.rev_date_enabled.get() else None,
+            input1_rev_cols=self.rev_input1_columns.copy(),
+            input2_block_cols=block_cols,
+            generate_latest_for_input2=self.rev_generate_latest.get(),
+        )
+
+        if settings.pattern_mode == "non-incremental":
+            if not settings.fixed_revision:
+                messagebox.showerror("Revision Checker", "Please provide the fixed revision tag for non-incremental mode.")
+                return None
+        else:
+            if self.rev_pattern_choice.get().lower() == "custom":
+                try:
+                    padding = int(self.rev_custom_padding.get() or 0)
+                except ValueError:
+                    messagebox.showerror("Revision Checker", "Custom padding must be an integer.")
+                    return None
+                try:
+                    step = int(self.rev_custom_step.get() or 1)
+                except ValueError:
+                    messagebox.showerror("Revision Checker", "Custom step must be an integer.")
+                    return None
+                try:
+                    base = int(self.rev_custom_base.get() or 10)
+                except ValueError:
+                    base = 10
+
+                settings.custom_pattern = CustomPatternConfig(
+                    prefix=self.rev_custom_prefix.get() or "",
+                    core_regex=self.rev_custom_regex.get() or r"(\d+)",
+                    padding=padding,
+                    base=base,
+                    start=self.rev_custom_start.get() or ("A" if base == 26 else "0"),
+                    step=step,
+                )
+                settings.pattern_choice = "Custom"
+
+        return settings
 
     def _start_merge(self):
         # 1. Collect file paths and reference columns
@@ -738,6 +1142,8 @@ class MergerGUI:
             filename_column=self.filename_column.get() if self.filename_enabled.get() else None
         )
 
+        rev_settings = self._collect_revision_settings()
+
         # 5. Delegate to the facade
         try:
             merged_df = MergerFacade.run_merge(
@@ -745,7 +1151,8 @@ class MergerGUI:
                 ref_columns=refs,
                 output_path=output,
                 title_columns=title_cols,
-                check_config=cfg
+                check_config=cfg,
+                rev_check_settings=rev_settings
             )
 
             # open file
