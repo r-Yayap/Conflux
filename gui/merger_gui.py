@@ -56,6 +56,10 @@ class MergerGUI:
         self.mergerApp.title("Conflux")
         self.mergerApp.iconbitmap(resource_path("style/conflux-logo.ico"))
 
+        # Fit the window within the current screen bounds to avoid oversizing on
+        # smaller displays.
+        self._configure_window_size()
+
         # File paths for three Excel files and the output file.
         self.excel1_path = tk.StringVar()
         self.excel2_path = tk.StringVar()
@@ -84,6 +88,12 @@ class MergerGUI:
 
         # for resetting
         self.preview_values_by_column = {}
+
+        # Section management
+        self.sections = {}
+        self.comparison_section_enabled = tk.BooleanVar(value=True)
+        self.filename_section_enabled = tk.BooleanVar(value=False)
+        self.revision_section_enabled = tk.BooleanVar(value=False)
 
         # Revision checker state
         self.rev_pattern_lock = tk.BooleanVar(value=True)
@@ -115,22 +125,133 @@ class MergerGUI:
 
         self._build_gui()
 
+        # After the widgets are created, ensure the geometry respects the
+        # calculated limits (update_idletasks is needed for accurate sizing).
+        self._configure_window_size()
+
     def _build_gui(self):
         self.mergerApp.grid_rowconfigure(0, weight=1)
         self.mergerApp.grid_columnconfigure(0, weight=1)
-        self.mergerApp.grid_columnconfigure(1, weight=1)
-        self.mergerApp.grid_columnconfigure(2, weight=1)
 
-        # Create three frames for Excel 1, 2, and 3.
-        self.excel1_frame = ctk.CTkFrame(self.mergerApp)
-        self.excel1_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-        self.excel2_frame = ctk.CTkFrame(self.mergerApp)
-        self.excel2_frame.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
-        self.excel3_frame = ctk.CTkFrame(self.mergerApp)
-        self.excel3_frame.grid(row=0, column=2, padx=10, pady=10, sticky="nsew")
+        # Wrap the full UI inside a scrollable frame so it remains usable on
+        # displays with limited vertical space.
+        self.main_scroll_frame = ctk.CTkScrollableFrame(self.mergerApp)
+        self.main_scroll_frame.grid(row=0, column=0, sticky="nsew")
+        self.main_scroll_frame.grid_columnconfigure(0, weight=1)
+
+        row = 0
+
+        self.files_frame = self._build_files_section(self.main_scroll_frame)
+        self.files_frame.grid(row=row, column=0, sticky="ew", padx=16, pady=(12, 12))
+        row += 1
+
+        comparison_container, comparison_body = self._create_toggle_section(
+            parent=self.main_scroll_frame,
+            section_id="comparison",
+            title="Comparison Options",
+            variable=self.comparison_section_enabled,
+            default_open=True,
+            on_enable=self._on_comparison_section_enabled,
+        )
+        comparison_container.grid(row=row, column=0, sticky="ew", padx=16, pady=(0, 12))
+        self.comparison_frame = comparison_body
+        self._build_comparison_checks(self.comparison_frame)
+        self._refresh_section_state("comparison")
+        row += 1
+
+        filename_container, filename_body = self._create_toggle_section(
+            parent=self.main_scroll_frame,
+            section_id="filename",
+            title="Filename Checker",
+            variable=self.filename_section_enabled,
+            default_open=False,
+            on_enable=self._on_filename_section_enabled,
+        )
+        filename_container.grid(row=row, column=0, sticky="ew", padx=16, pady=(0, 12))
+        self.filename_frame = filename_body
+        self._build_filename_checker(self.filename_frame)
+        self._refresh_section_state("filename")
+        row += 1
+
+        revision_container, revision_body = self._create_toggle_section(
+            parent=self.main_scroll_frame,
+            section_id="revision",
+            title="Revision Checker",
+            variable=self.revision_section_enabled,
+            default_open=False,
+            on_enable=self._on_revision_section_enabled,
+        )
+        revision_container.grid(row=row, column=0, sticky="ew", padx=16, pady=(0, 12))
+        self.revision_frame = revision_body
+        self._build_revision_checker(self.revision_frame)
+        self._refresh_section_state("revision")
+        row += 1
+
+        self.controls_frame = ctk.CTkFrame(self.main_scroll_frame)
+        self.controls_frame.grid(row=row, column=0, sticky="ew", padx=16, pady=(0, 16))
+        self.controls_frame.grid_columnconfigure(0, weight=1)
+        self._build_controls(self.controls_frame)
+
+    def _configure_window_size(self):
+        """Clamp the application window within the available screen size."""
+        # Ensure geometry information is up-to-date before reading screen data.
+        try:
+            self.mergerApp.update_idletasks()
+        except tk.TclError:
+            # The window might not be fully initialized yet; continue with best effort.
+            pass
+
+        screen_width = self.mergerApp.winfo_screenwidth()
+        screen_height = self.mergerApp.winfo_screenheight()
+
+        margin = 80
+        desired_width = 1280
+        desired_height = 900
+
+        width = max(960, min(desired_width, screen_width - margin))
+        height = max(720, min(desired_height, screen_height - margin))
+
+        width = min(width, screen_width)
+        height = min(height, screen_height)
+
+        if width <= 0 or height <= 0:
+            width = min(desired_width, screen_width)
+            height = min(desired_height, screen_height)
+
+        self.mergerApp.geometry(f"{int(width)}x{int(height)}")
+
+    def _build_files_section(self, parent):
+        container = ctk.CTkFrame(parent)
+        container.grid_columnconfigure((0, 1), weight=1)
+
+        ctk.CTkLabel(
+            container,
+            text="Source Files",
+            font=("Helvetica", 15, "bold"),
+        ).grid(row=0, column=0, columnspan=2, padx=8, pady=(8, 0), sticky="w")
+
+        ctk.CTkLabel(
+            container,
+            text="Load the spreadsheets below to unlock comparison and export options.",
+            font=("Helvetica", 11),
+            text_color=("#4A4A4A", "#B9B9B9"),
+            wraplength=520,
+        ).grid(row=1, column=0, columnspan=2, padx=8, pady=(0, 8), sticky="w")
+
+        files_grid = ctk.CTkFrame(container, fg_color="transparent")
+        files_grid.grid(row=2, column=0, columnspan=2, sticky="nsew")
+        files_grid.grid_columnconfigure((0, 1), weight=1)
+
+        self.excel1_frame = ctk.CTkFrame(files_grid)
+        self.excel1_frame.grid(row=0, column=0, padx=8, pady=6, sticky="nsew")
+
+        self.excel2_frame = ctk.CTkFrame(files_grid)
+        self.excel2_frame.grid(row=0, column=1, padx=8, pady=6, sticky="nsew")
+
+        self.excel3_frame = ctk.CTkFrame(files_grid)
+        self.excel3_frame.grid(row=1, column=0, columnspan=2, padx=8, pady=6, sticky="nsew")
 
         for frame in (self.excel1_frame, self.excel2_frame, self.excel3_frame):
-            frame.grid_rowconfigure(0, weight=0)
             frame.grid_columnconfigure(0, weight=0)
             frame.grid_columnconfigure(1, weight=1)
 
@@ -138,41 +259,166 @@ class MergerGUI:
         self._build_excel2_section(self.excel2_frame)
         self._build_excel3_section(self.excel3_frame)
 
+        return container
 
-        # Create the comparison check frame
-        self.comparison_frame = ctk.CTkFrame(self.mergerApp)
-        self.comparison_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=(10, 10), sticky="nsew")
-        self._build_comparison_checks(self.comparison_frame)
+    def _create_toggle_section(self, parent, section_id, title, variable, default_open=True, on_enable=None):
+        container = ctk.CTkFrame(parent)
+        container.grid_columnconfigure(0, weight=1)
 
-        # Build Filename Checker frame to the right
-        self.filename_frame = ctk.CTkFrame(self.mergerApp)
-        self.filename_frame.grid(row=1, column=2, padx=10, pady=(10, 10), sticky="nsew")
-        self._build_filename_checker(self.filename_frame)
+        header = ctk.CTkFrame(container, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 0))
+        header.grid_columnconfigure(1, weight=1)
 
-        # Revision checker frame
-        self.revision_frame = ctk.CTkFrame(self.mergerApp)
-        self.revision_frame.grid(row=2, column=0, columnspan=3, padx=10, pady=(5, 10), sticky="nsew")
-        self._build_revision_checker(self.revision_frame)
+        arrow_var = tk.StringVar(value="▼" if default_open else "▶")
+        info = {"is_collapsed": not default_open}
 
-        # Create controls frame (move down)
-        self.controls_frame = ctk.CTkFrame(self.mergerApp)
-        self.controls_frame.grid(row=3, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
-        self._build_controls(self.controls_frame)
+        def toggle_body():
+            if not variable.get():
+                variable.set(True)
+                info["is_collapsed"] = False
+                info["enable_handler"]()
+                return
+
+            if info["is_collapsed"]:
+                info["is_collapsed"] = False
+                info["body"].grid(**info["grid_kwargs"])
+                arrow_var.set("▼")
+            else:
+                info["is_collapsed"] = True
+                if info["body"].winfo_manager():
+                    info["body"].grid_remove()
+                arrow_var.set("▶")
+
+        toggle_button = ctk.CTkButton(
+            header,
+            textvariable=arrow_var,
+            width=28,
+            height=28,
+            fg_color="transparent",
+            hover_color=("#E0E0E0", "#2E2E2E"),
+            command=toggle_body,
+            font=("Helvetica", 16),
+        )
+        toggle_button.grid(row=0, column=0, padx=(0, 6), pady=2)
+
+        title_label = ctk.CTkLabel(header, text=title, font=("Helvetica", 14, "bold"))
+        title_label.grid(row=0, column=1, sticky="w")
+
+        enable_switch = ctk.CTkSwitch(
+            header,
+            text="Enabled",
+            variable=variable,
+        )
+        enable_switch.grid(row=0, column=2, padx=(8, 4))
+
+        body = ctk.CTkFrame(container)
+        body.grid_columnconfigure(0, weight=1)
+
+        grid_kwargs = dict(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        if default_open:
+            body.grid(**grid_kwargs)
+
+        def enable_handler():
+            enabled = variable.get()
+            if enabled:
+                toggle_button.configure(state="normal")
+                if info["is_collapsed"]:
+                    if body.winfo_manager():
+                        body.grid_remove()
+                    arrow_var.set("▶")
+                else:
+                    body.grid(**grid_kwargs)
+                    arrow_var.set("▼")
+                self._set_section_state(body, True)
+            else:
+                toggle_button.configure(state="disabled")
+                if body.winfo_manager():
+                    body.grid_remove()
+                arrow_var.set("▶")
+                info["is_collapsed"] = True
+                self._set_section_state(body, False)
+            if on_enable is not None:
+                on_enable(enabled)
+
+        enable_switch.configure(command=enable_handler)
+        title_label.bind("<Button-1>", lambda _event: toggle_body())
+
+        info.update(
+            {
+                "container": container,
+                "body": body,
+                "arrow_var": arrow_var,
+                "toggle_button": toggle_button,
+                "enable_switch": enable_switch,
+                "variable": variable,
+                "grid_kwargs": grid_kwargs,
+                "enable_handler": enable_handler,
+            }
+        )
+        self.sections[section_id] = info
+
+        return container, body
+
+    def _set_section_state(self, widget, enabled):
+        desired_state = "normal" if enabled else "disabled"
+        for child in widget.winfo_children():
+            try:
+                child.configure(state=desired_state)
+            except Exception:
+                pass
+            self._set_section_state(child, enabled)
+
+    def _refresh_section_state(self, section_id):
+        section = self.sections.get(section_id)
+        if not section:
+            return
+        section["enable_handler"]()
+
+    def _on_comparison_section_enabled(self, enabled):
+        if not enabled:
+            self.compare_excel2_title.set(False)
+            self.compare_excel3_title.set(False)
+            if hasattr(self, "status_enabled"):
+                self.status_enabled.set(False)
+            if hasattr(self, "project_enabled"):
+                self.project_enabled.set(False)
+            for check_vars in getattr(self, "custom_checks", []):
+                check_vars[0].set(False)
+        self._toggle_title_entries()
+        self._toggle_status()
+        self._toggle_project()
+        self._toggle_custom_checks()
+
+    def _on_filename_section_enabled(self, enabled):
+        if not enabled:
+            self.filename_enabled.set(False)
+        self._toggle_filename_check()
+
+    def _on_revision_section_enabled(self, enabled):
+        if enabled:
+            self._update_revision_pattern_controls()
+            self._update_revision_latest_desc()
+            self._update_revision_date_controls()
+        else:
+            self.rev_latest_desc_enabled.set(False)
+            self.rev_date_enabled.set(False)
+            self._update_revision_latest_desc()
+            self._update_revision_date_controls()
 
     def _build_excel1_section(self, parent_frame):
         font_name = "Helvetica"
-        font_size = 12
+        font_size = 11
         self.excel1_button = ctk.CTkButton(parent_frame,
-            text="\n➕\n\nSelect Extracted Excel or\nDrag & Drop Here",
+            text="Select Extracted Excel\n(Drag & Drop)",
             command=self._browse_excel1,
-            border_width=3,
+            border_width=2,
             fg_color="transparent",
-            hover_color=("#D6D6D6", "#505050"),  # Light and dark hover color
+            hover_color=("#D6D6D6", "#3C3C3C"),  # Light and dark hover color
             text_color=("#333333", "#FFFFFF"),
             corner_radius=10,
-            width=200,
-            height=150)
-        self.excel1_button.grid(row=0, column=0, columnspan=2, padx=33, pady=33, sticky="ew")
+            width=220,
+            height=120)
+        self.excel1_button.grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 14), sticky="ew")
         # Enable drag and drop on Excel1 button.
         self.excel1_button.drop_target_register(DND_ALL)
         self.excel1_button.dnd_bind('<<Drop>>', self.drop_excel1)
@@ -191,30 +437,29 @@ class MergerGUI:
         self.reset1_btn.place_forget()
 
         ctk.CTkLabel(parent_frame, text="Reference Column:", font=(font_name, font_size)).grid(
-            row=1, column=0, padx=5, pady=2, sticky="e")
-        self.ref_option_menu1 = ctk.CTkOptionMenu(parent_frame, variable=self.ref_column1, values=[])
-        self.ref_option_menu1.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
-        ctk.CTkLabel(parent_frame, text="", font=(font_name, font_size)).grid(
-            row=2, column=0, padx=5, pady=2, sticky="e")
+            row=1, column=0, padx=8, pady=4, sticky="e")
+        self.ref_option_menu1 = ctk.CTkOptionMenu(parent_frame, variable=self.ref_column1, values=[], state="disabled")
+        self.ref_option_menu1.grid(row=1, column=1, padx=8, pady=4, sticky="ew")
+
         ctk.CTkLabel(parent_frame, text="Drawing Title:", font=(font_name, font_size)).grid(
-            row=3, column=0, padx=5, pady=2, sticky="e")
+            row=2, column=0, padx=8, pady=4, sticky="e")
         self.title_option_menu1 = ctk.CTkOptionMenu(parent_frame, variable=self.title_column1, values=[], state="disabled")
-        self.title_option_menu1.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
+        self.title_option_menu1.grid(row=2, column=1, padx=8, pady=(4, 10), sticky="ew")
 
     def _build_excel2_section(self, parent_frame):
         font_name = "Helvetica"
-        font_size = 12
+        font_size = 11
         self.excel2_button = ctk.CTkButton(parent_frame,
-            text="\n➕\n\nSelect DC_LOD Excel or\nDrag & Drop Here",
+            text="Select DC_LOD Excel\n(Drag & Drop)",
             command=self._browse_excel2,
-            border_width=3,
+            border_width=2,
             fg_color="transparent",
-            hover_color=("#D6D6D6", "#505050"),  # Light and dark hover color
+            hover_color=("#D6D6D6", "#3C3C3C"),  # Light and dark hover color
             text_color=("#333333", "#FFFFFF"),
             corner_radius=10,
-            width=200,
-            height=150)
-        self.excel2_button.grid(row=0, column=0, columnspan=2, padx=33, pady=33, sticky="ew")
+            width=220,
+            height=120)
+        self.excel2_button.grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 14), sticky="ew")
         self.excel2_button.drop_target_register(DND_ALL)
         self.excel2_button.dnd_bind('<<Drop>>', self.drop_excel2)
 
@@ -233,33 +478,33 @@ class MergerGUI:
         self.reset2_btn.place_forget()
 
         ctk.CTkLabel(parent_frame, text="Reference Column:", font=(font_name, font_size)).grid(
-            row=1, column=0, padx=5, pady=2, sticky="e")
-        self.ref_option_menu2 = ctk.CTkOptionMenu(parent_frame, variable=self.ref_column2, values=[])
-        self.ref_option_menu2.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+            row=1, column=0, padx=8, pady=4, sticky="e")
+        self.ref_option_menu2 = ctk.CTkOptionMenu(parent_frame, variable=self.ref_column2, values=[], state="disabled")
+        self.ref_option_menu2.grid(row=1, column=1, padx=8, pady=4, sticky="ew")
 
         ctk.CTkCheckBox(parent_frame, text="Compare Title 2",
                         variable=self.compare_excel2_title, command=self._toggle_title_entries).grid(
-            row=2, column=0, columnspan=2, padx=5, pady=2, sticky="w")
+            row=2, column=0, columnspan=2, padx=8, pady=4, sticky="w")
 
         ctk.CTkLabel(parent_frame, text="Drawing Title:", font=(font_name, font_size)).grid(
-            row=3, column=0, padx=5, pady=2, sticky="e")
+            row=3, column=0, padx=8, pady=4, sticky="e")
         self.title_option_menu2 = ctk.CTkOptionMenu(parent_frame, variable=self.title_column2, values=[], state="disabled")
-        self.title_option_menu2.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
+        self.title_option_menu2.grid(row=3, column=1, padx=8, pady=(4, 10), sticky="ew")
 
     def _build_excel3_section(self, parent_frame):
         font_name = "Helvetica"
-        font_size = 12
+        font_size = 11
         self.excel3_button = ctk.CTkButton(parent_frame,
-            text="\n➕\n\nSelect DD_LOD Excel or\nDrag & Drop Here",
+            text="Select DD_LOD Excel\n(Drag & Drop)",
             command=self._browse_excel3,
-            border_width=3,
+            border_width=2,
             fg_color="transparent",
-            hover_color=("#D6D6D6", "#505050"),  # Light and dark hover color
+            hover_color=("#D6D6D6", "#3C3C3C"),  # Light and dark hover color
             text_color=("#333333", "#FFFFFF"),
             corner_radius=10,
-            width=200,
-            height=150)
-        self.excel3_button.grid(row=0, column=0, columnspan=2, padx=33, pady=33, sticky="ew")
+            width=220,
+            height=120)
+        self.excel3_button.grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 14), sticky="ew")
         self.excel3_button.drop_target_register(DND_ALL)
         self.excel3_button.dnd_bind('<<Drop>>', self.drop_excel3)
 
@@ -278,17 +523,17 @@ class MergerGUI:
         self.reset3_btn.place_forget()
 
         ctk.CTkLabel(parent_frame, text="Reference Column:", font=(font_name, font_size)).grid(
-            row=1, column=0, padx=5, pady=2, sticky="e")
-        self.ref_option_menu3 = ctk.CTkOptionMenu(parent_frame, variable=self.ref_column3, values=[])
-        self.ref_option_menu3.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+            row=1, column=0, padx=8, pady=4, sticky="e")
+        self.ref_option_menu3 = ctk.CTkOptionMenu(parent_frame, variable=self.ref_column3, values=[], state="disabled")
+        self.ref_option_menu3.grid(row=1, column=1, padx=8, pady=4, sticky="ew")
         # Place the compare title checkbox above the title dropdown.
         ctk.CTkCheckBox(parent_frame, text="Compare Title 3",
                         variable=self.compare_excel3_title, command=self._toggle_title_entries).grid(
-            row=2, column=0, columnspan=2, padx=5, pady=2, sticky="w")
+            row=2, column=0, columnspan=2, padx=8, pady=4, sticky="w")
         ctk.CTkLabel(parent_frame, text="Drawing Title:", font=(font_name, font_size)).grid(
-            row=3, column=0, padx=5, pady=2, sticky="e")
+            row=3, column=0, padx=8, pady=4, sticky="e")
         self.title_option_menu3 = ctk.CTkOptionMenu(parent_frame, variable=self.title_column3, values=[], state="disabled")
-        self.title_option_menu3.grid(row=3, column=1, padx=5, pady=2, sticky="ew")
+        self.title_option_menu3.grid(row=3, column=1, padx=8, pady=(4, 10), sticky="ew")
 
     def _reset_excel1(self):
         """Return Excel-1 slot to its pristine state."""
@@ -366,13 +611,15 @@ class MergerGUI:
 
     def _build_comparison_checks(self, parent_frame):
         """Builds the checkboxes, dropdowns, and textboxes for additional validation."""
+        parent_frame.grid_columnconfigure(0, weight=0)
+        parent_frame.grid_columnconfigure(1, weight=1)
+        parent_frame.grid_columnconfigure(2, weight=1)
+
         # Add column labels
-        ctk.CTkLabel(parent_frame, text="Enable", font=("Helvetica", 12, "bold")).grid(row=0, column=0, padx=5, pady=2,
-                                                                                       sticky="w")
-        ctk.CTkLabel(parent_frame, text="Column Name", font=("Helvetica", 12, "bold")).grid(row=0, column=1, padx=5,
-                                                                                            pady=2, sticky="ew")
-        ctk.CTkLabel(parent_frame, text="Expected Value", font=("Helvetica", 12, "bold")).grid(row=0, column=2, padx=5,
-                                                                                               pady=2, sticky="ew")
+        header_font = ("Helvetica", 11, "bold")
+        ctk.CTkLabel(parent_frame, text="Enable", font=header_font).grid(row=0, column=0, padx=6, pady=(2, 4), sticky="w")
+        ctk.CTkLabel(parent_frame, text="Column Name", font=header_font).grid(row=0, column=1, padx=6, pady=(2, 4), sticky="ew")
+        ctk.CTkLabel(parent_frame, text="Expected Value", font=header_font).grid(row=0, column=2, padx=6, pady=(2, 4), sticky="ew")
 
         # Status Check (Moved to row=1)
         self.status_enabled = tk.BooleanVar(value=False)
@@ -386,10 +633,10 @@ class MergerGUI:
             parent_frame, text="Check 1",
             variable=self.status_enabled, command=self._toggle_status
         )
-        self.status_check.grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        self.status_check.grid(row=1, column=0, padx=6, pady=4, sticky="w")
 
         self.status_dropdown = ctk.CTkOptionMenu(parent_frame, variable=self.status_column, values=[], state="disabled")
-        self.status_dropdown.grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+        self.status_dropdown.grid(row=1, column=1, padx=6, pady=4, sticky="ew")
 
         self.status_combo = ctk.CTkComboBox(
             parent_frame,
@@ -398,7 +645,7 @@ class MergerGUI:
             state="disabled",
             justify="left"
         )
-        self.status_combo.grid(row=1, column=2, padx=5, pady=2, sticky="ew")
+        self.status_combo.grid(row=1, column=2, padx=6, pady=4, sticky="ew")
 
         # Project Name Check (Moved to row=2)
         self.project_enabled = tk.BooleanVar(value=False)
@@ -412,11 +659,11 @@ class MergerGUI:
             parent_frame, text="Check 2",
             variable=self.project_enabled, command=self._toggle_project
         )
-        self.project_check.grid(row=2, column=0, padx=5, pady=2, sticky="w")
+        self.project_check.grid(row=2, column=0, padx=6, pady=4, sticky="w")
 
         self.project_dropdown = ctk.CTkOptionMenu(parent_frame, variable=self.project_column, values=[],
                                                   state="disabled")
-        self.project_dropdown.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+        self.project_dropdown.grid(row=2, column=1, padx=6, pady=4, sticky="ew")
 
         self.project_combo = ctk.CTkComboBox(
             parent_frame,
@@ -425,12 +672,12 @@ class MergerGUI:
             state="disabled",
             justify="left"
         )
-        self.project_combo.grid(row=2, column=2, padx=5, pady=2, sticky="ew")
+        self.project_combo.grid(row=2, column=2, padx=6, pady=4, sticky="ew")
 
         # Add Custom Checks Button (Moved to row=3)
         self.custom_checks = []
         self.add_check_button = ctk.CTkButton(parent_frame, text="+ Add Check", command=self._add_custom_check)
-        self.add_check_button.grid(row=3, column=0, columnspan=3, padx=5, pady=2, sticky="ew")
+        self.add_check_button.grid(row=3, column=0, columnspan=3, padx=6, pady=(8, 4), sticky="ew")
 
     def _build_filename_checker(self, parent_frame):
         """Builds the UI for filename comparison against reference column."""
@@ -438,22 +685,30 @@ class MergerGUI:
         self.filename_enabled = tk.BooleanVar(value=False)
         self.filename_column = tk.StringVar()
 
-        ctk.CTkLabel(parent_frame, text="Filename vs Reference Number", font=("Helvetica", 12, "bold")).grid(
-            row=0, column=0, columnspan=2, padx=5, pady=(5, 2), sticky="w")
+        parent_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            parent_frame,
+            text="Validate filenames against your reference column before exporting.",
+            font=("Helvetica", 10),
+            text_color=("#4A4A4A", "#B9B9B9"),
+            wraplength=420,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=2, padx=6, pady=(2, 4), sticky="w")
 
         self.filename_check = ctk.CTkCheckBox(
             parent_frame, text="Enable Filename Check",
             variable=self.filename_enabled,
             command=self._toggle_filename_check
         )
-        self.filename_check.grid(row=1, column=0, columnspan=2, padx=5, pady=2, sticky="w")
+        self.filename_check.grid(row=1, column=0, columnspan=2, padx=6, pady=4, sticky="w")
 
         ctk.CTkLabel(parent_frame, text="Filename Column:", font=("Helvetica", 11)).grid(
-            row=2, column=0, padx=5, pady=2, sticky="e")
+            row=2, column=0, padx=6, pady=4, sticky="e")
 
         self.filename_dropdown = ctk.CTkOptionMenu(parent_frame, variable=self.filename_column, values=[],
                                                    state="disabled")
-        self.filename_dropdown.grid(row=2, column=1, padx=5, pady=2, sticky="ew")
+        self.filename_dropdown.grid(row=2, column=1, padx=6, pady=4, sticky="ew")
 
     def _build_revision_checker(self, parent_frame):
         parent_frame.grid_columnconfigure(0, weight=1)
@@ -707,20 +962,25 @@ class MergerGUI:
     def _build_controls(self, parent_frame):
         font_name = "Helvetica"
         font_size = 12
-        ctk.CTkLabel(parent_frame, text="Output Path:", font=(font_name, font_size)).grid(
-            row=0, column=0, padx=5, pady=2, sticky="e")
-        ctk.CTkEntry(parent_frame, textvariable=self.output_path, width=300).grid(
-            row=0, column=1, padx=5, pady=2, sticky="ew")
-        ctk.CTkButton(parent_frame, text="Use Excel 1 Path", command=self._use_excel1_path).grid(
-            row=0, column=2, padx=5, pady=2)
-        # Theme toggle switch (no label) placed at the bottom-right of the controls frame.
-        self.theme_switch = ctk.CTkSwitch(parent_frame, text="", variable=self.theme_mode,
-                                          command=self.toggle_theme, switch_width=20, switch_height=10)
-        # Use place to anchor it at the bottom-right corner of the parent frame.
-        self.theme_switch.place(relx=1.0, rely=1.0, anchor="se")
-        ctk.CTkButton(parent_frame, text="Start Merge", command=self._start_merge).grid(
-            row=2, column=0, columnspan=3, pady=10)
         parent_frame.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(parent_frame, text="Output Path:", font=(font_name, font_size)).grid(
+            row=0, column=0, padx=6, pady=(6, 4), sticky="e")
+        ctk.CTkEntry(parent_frame, textvariable=self.output_path).grid(
+            row=0, column=1, padx=6, pady=(6, 4), sticky="ew")
+        ctk.CTkButton(parent_frame, text="Use Excel 1 Path", command=self._use_excel1_path).grid(
+            row=0, column=2, padx=6, pady=(6, 4))
+
+        self.theme_switch = ctk.CTkSwitch(
+            parent_frame,
+            text="Dark mode",
+            variable=self.theme_mode,
+            command=self.toggle_theme,
+        )
+        self.theme_switch.grid(row=0, column=3, padx=(6, 6), pady=(6, 4), sticky="e")
+
+        ctk.CTkButton(parent_frame, text="Start Merge", command=self._start_merge, height=40).grid(
+            row=1, column=0, columnspan=4, padx=6, pady=(10, 8), sticky="ew")
 
     def _update_preview_combo(self, column_var, combo_widget):
         col_name = column_var.get()
@@ -802,10 +1062,10 @@ class MergerGUI:
             self.comparison_frame, text=f"Check {row_idx}",
             variable=enabled_var
         )
-        check.grid(row=row_idx, column=0, padx=5, pady=2, sticky="w")
+        check.grid(row=row_idx, column=0, padx=6, pady=4, sticky="w")
 
         dropdown = ctk.CTkOptionMenu(self.comparison_frame, variable=column_var, values=[], state="disabled")
-        dropdown.grid(row=row_idx, column=1, padx=5, pady=2, sticky="ew")
+        dropdown.grid(row=row_idx, column=1, padx=6, pady=4, sticky="ew")
 
         combo = ctk.CTkComboBox(
             self.comparison_frame,
@@ -814,7 +1074,7 @@ class MergerGUI:
             state="disabled",
             justify="left"
         )
-        combo.grid(row=row_idx, column=2, padx=5, pady=2, sticky="ew")
+        combo.grid(row=row_idx, column=2, padx=6, pady=4, sticky="ew")
 
         # ✅ Store all required elements (including dropdown widget) to update later
         self.custom_checks.append((enabled_var, column_var, value_var, dropdown, combo))
@@ -905,8 +1165,9 @@ class MergerGUI:
                 for header in headers
             }
 
-            self.ref_option_menu1.configure(values=headers)
+            self.ref_option_menu1.configure(values=headers, state="normal")
             self.title_option_menu1.configure(values=headers)
+            self._toggle_title_entries()
             self.ref_column1.set(auto_select_header(headers, ["drawing", "sheet", "ref", "number"]))
             self.title_column1.set(auto_select_header(headers, ["title"]))
 
@@ -950,8 +1211,9 @@ class MergerGUI:
             df = pd.read_excel(file_path, engine='openpyxl', nrows=0)
             headers = list(df.columns)
             self.excel2_headers = headers
-            self.ref_option_menu2.configure(values=headers)
+            self.ref_option_menu2.configure(values=headers, state="normal")
             self.title_option_menu2.configure(values=headers)
+            self._toggle_title_entries()
             self.ref_column2.set(auto_select_header(headers, ["drawing", "sheet", "ref", "number"]))
             self.title_column2.set(auto_select_header(headers, ["title"]))
 
@@ -980,8 +1242,9 @@ class MergerGUI:
             df = pd.read_excel(file_path, engine='openpyxl', nrows=0)
             headers = list(df.columns)
             self.excel3_headers = headers
-            self.ref_option_menu3.configure(values=headers)
+            self.ref_option_menu3.configure(values=headers, state="normal")
             self.title_option_menu3.configure(values=headers)
+            self._toggle_title_entries()
             self.ref_column3.set(auto_select_header(headers, ["drawing", "sheet", "ref", "number"]))
             self.title_column3.set(auto_select_header(headers, ["title"]))
 
