@@ -1265,6 +1265,9 @@ class MergerGUI:
             self.output_path.set(os.path.join(directory, f"{name}_merged{ext}"))
 
     def _collect_revision_settings(self) -> Optional[RevCheckSettings]:
+        if not self.revision_section_enabled.get():
+            return None
+
         if not self.rev_input1_columns:
             return None
 

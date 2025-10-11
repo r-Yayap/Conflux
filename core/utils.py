@@ -27,9 +27,16 @@ def add_title_match_column(
         df["title_match"] = "N/A"
         return df
 
-    # normalize helper: strip out non-alphanumeric, lowercase
+    # normalize helper: lowercase, collapse interior whitespace, but keep spaces.
+    # We only strip punctuation so that a hyphen or slash does not count as a
+    # difference, while preserving the spaces that users expect to see.
     def normalize(s: str) -> str:
-        return re.sub(r'[^A-Za-z0-9]+', '', s).lower()
+        lowered = s.lower()
+        # Remove punctuation but keep whitespace characters
+        without_punct = re.sub(r'[^\w\s]', '', lowered)
+        # Collapse consecutive whitespace to a single space
+        collapsed = re.sub(r'\s+', ' ', without_punct)
+        return collapsed.strip()
 
     base, *others = renamed
 
